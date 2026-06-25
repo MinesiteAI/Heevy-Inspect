@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../analytics/inspect_analytics.dart';
 import '../../config/heevy_brand.dart';
 import '../../features/assets/asset_picker_sheet.dart';
 import '../../theme/app_colors.dart';
@@ -35,6 +36,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String? _assetId;
   String? _assetTag;
   bool _submitting = false;
+  bool _createWorkOrder = false;
   String? _error;
 
   CaptureService get _svc => CaptureService(Supabase.instance.client);
@@ -104,13 +106,21 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
           for (final p in _photos)
             CapturePhoto(bytes: p.bytes, mime: p.mime, ext: p.ext),
         ],
+        createWorkOrder: _createWorkOrder,
       );
+      await InspectAnalytics.track('first_capture');
+      if (_createWorkOrder) {
+        await InspectAnalytics.track('capture_create_wo');
+      }
       if (!mounted) return;
       final wr = result['wr_number']?.toString();
+      final wo = result['work_order_number']?.toString();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            wr != null && wr.isNotEmpty
+            wo != null && wo.isNotEmpty
+                ? 'Capture submitted ($wr) · WO $wo'
+                : wr != null && wr.isNotEmpty
                 ? 'Capture submitted ($wr)'
                 : 'Capture submitted',
           ),
@@ -292,7 +302,21 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Create work order now',
+              style: TextStyle(color: AppColors.text(context)),
+            ),
+            subtitle: Text(
+              'Also open a basic WO (scheduling requires upgrade)',
+              style: TextStyle(color: AppColors.textFaint(context), fontSize: 12),
+            ),
+            value: _createWorkOrder,
+            onChanged: (v) => setState(() => _createWorkOrder = v),
+          ),
+          const SizedBox(height: 12),
           HeevyPrimaryButton(
             label: _submitting ? 'Submitting…' : 'Submit capture',
             loading: _submitting,

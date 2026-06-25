@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
+import 'capture_detail_screen.dart';
 import 'capture_service.dart';
 
 class CaptureHistoryScreen extends StatefulWidget {
@@ -89,9 +90,18 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
                 return Material(
                   color: AppColors.surface(context),
                   borderRadius: BorderRadius.circular(14),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => CaptureDetailScreen(capture: row),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
@@ -160,6 +170,7 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
                       ],
                     ),
                   ),
+                ),
                 );
               },
             );

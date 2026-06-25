@@ -28,7 +28,7 @@ jobs:
         with:
           version: 2.98.2
 
-      - name: Deploy mobile-submit-field-capture
+      - name: Deploy Heevy Inspect edge functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_ID }}
@@ -39,6 +39,18 @@ jobs:
             echo "::error::SUPABASE_ACCESS_TOKEN secret required"
             exit 1
           fi
-          supabase functions deploy mobile-submit-field-capture \
-            --project-ref "$PROJECT_ID" \
-            --use-api
+          FUNCTIONS=(
+            mobile-submit-field-capture
+            mobile-submit-pm-inspection
+            mobile-create-work-order
+            mobile-list-work-orders
+            mobile-get-work-order
+            mobile-field-chat
+            mobile-sign-storage-urls
+          )
+          for fn in "${FUNCTIONS[@]}"; do
+            echo "Deploying $fn..."
+            supabase functions deploy "$fn" \
+              --project-ref "$PROJECT_ID" \
+              --use-api
+          done

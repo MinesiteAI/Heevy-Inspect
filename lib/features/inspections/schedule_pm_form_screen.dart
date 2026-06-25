@@ -690,6 +690,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
         if (user?.id != null) upd['created_by'] = user!.id;
         await Supabase.instance.client.from('pm_form_submissions').update(upd).eq('id', updateId);
       } else {
+        String? submissionId;
         try {
           final fn = await Supabase.instance.client.functions.invoke(
             'mobile-submit-pm-inspection',
@@ -706,6 +707,10 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
           if (fn.status >= 400) {
             throw Exception('Submit failed (${fn.status})');
           }
+          final data = fn.data;
+          if (data is Map) {
+            submissionId = data['pm_submission_id']?.toString();
+          }
         } catch (_) {
           final insertRow = <String, dynamic>{
             'template_id': widget.scheduleTemplateId,
@@ -718,14 +723,64 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
           final li = widget.mobileLineItemId?.trim();
           if (li != null && li.isNotEmpty) insertRow['mobile_line_item_id'] = li;
           if (user?.id != null) insertRow['created_by'] = user!.id;
-          await Supabase.instance.client.from('pm_form_submissions').insert(insertRow);
+          final inserted = await Supabase.instance.client
+              .from('pm_form_submissions')
+              .insert(insertRow)
+              .select('id')
+              .maybeSingle();
+          submissionId = inserted?['id']?.toString();
         }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Inspection submitted')),
+        );
+
+        final defectNotes = <String>[];
+        for (final e in _checkStatus.entries) {
+          if (e.value == 'defective') {
+            final comment = _checkCommentCtrls[e.key]?.text.trim() ?? '';
+            defectNotes.add(comment.isNotEmpty ? comment : 'Defective item: ${e.key}');
+          }
+        }
+        if (defectNotes.isNotEmpty) {
+          await showPmGenerateWorkOrderDialog(
+            context,
+            widget.pmTemplateShell,
+            defectSummary: defectNotes.join('; '),
+            location: _plantAreaCtrl.text.trim(),
+            sourceSubmissionId: submissionId,
+          );
+        }
+
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Inspection submitted')),
       );
+
+      final defectNotes = <String>[];
+      for (final e in _checkStatus.entries) {
+        if (e.value == 'defective') {
+          final comment = _checkCommentCtrls[e.key]?.text.trim() ?? '';
+          defectNotes.add(comment.isNotEmpty ? comment : 'Defective item: ${e.key}');
+        }
+      }
+      if (defectNotes.isNotEmpty) {
+        await showPmGenerateWorkOrderDialog(
+          context,
+          widget.pmTemplateShell,
+          defectSummary: defectNotes.join('; '),
+          location: _plantAreaCtrl.text.trim(),
+          sourceSubmissionId: updateId,
+        );
+      }
+
+      if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;

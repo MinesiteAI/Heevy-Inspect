@@ -29,6 +29,7 @@ class CaptureService {
     String? voiceTranscript,
     List<CapturePhoto> photos = const [],
     String? mineSiteId,
+    bool createWorkOrder = false,
   }) async {
     final photoPayloads = [
       for (final p in photos)
@@ -52,6 +53,7 @@ class CaptureService {
           if (voiceTranscript != null) 'voice_transcript': voiceTranscript,
           if (photoPayloads.isNotEmpty) 'photo_payloads': photoPayloads,
           if (mineSiteId != null) 'mine_site_id': mineSiteId,
+          if (createWorkOrder) 'create_work_order': true,
         },
       );
     } catch (e) {
@@ -75,7 +77,7 @@ class CaptureService {
     final rows = await _client
         .from('field_captures')
         .select(
-          'id, created_at, plant_area, severity, notes, photo_urls, status, work_request_id',
+          'id, created_at, plant_area, severity, notes, photo_urls, status, work_request_id, voice_transcript',
         )
         .eq('created_by', uid)
         .order('created_at', ascending: false)

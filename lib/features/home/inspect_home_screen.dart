@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../analytics/inspect_analytics.dart';
 import '../../billing/entitlement_service.dart';
 import '../../config/heevy_brand.dart';
 import '../../theme/app_colors.dart';
@@ -9,8 +10,10 @@ import '../../widgets/heevy_brand_title.dart';
 import '../../widgets/heevy_ui.dart';
 import '../capture/capture_history_screen.dart';
 import '../capture/quick_capture_screen.dart';
-import '../inspections/pm_templates_list_screen.dart';
+import '../chat/field_guide_screen.dart';
+import '../inspections/inspections_home_screen.dart';
 import '../upgrade/upgrade_screen.dart';
+import '../work_orders/work_orders_list_screen.dart';
 
 class InspectHomeScreen extends StatelessWidget {
   const InspectHomeScreen({super.key, required this.entitlement});
@@ -105,18 +108,69 @@ class InspectHomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              HeevyListTile(
-                icon: Icons.add_a_photo_outlined,
-                title: 'Quick capture',
-                subtitle: 'Photo, area, severity → draft work request',
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const QuickCaptureScreen(),
-                    ),
-                  );
-                },
-              ),
+              if (entitlement.allowsFieldCapture)
+                HeevyListTile(
+                  icon: Icons.add_a_photo_outlined,
+                  title: 'Quick capture',
+                  subtitle: 'Photo, area, severity → work request or WO',
+                  accent: true,
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const QuickCaptureScreen(),
+                      ),
+                    );
+                    await InspectAnalytics.track('quick_capture_open');
+                  },
+                ),
+              if (!entitlement.allowsFieldCapture)
+                _DisabledTile(
+                  icon: Icons.add_a_photo_outlined,
+                  title: 'Quick capture',
+                  subtitle: 'Not enabled for your organization',
+                ),
+              const SizedBox(height: 10),
+              if (entitlement.showPmTemplates)
+                HeevyListTile(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Inspections',
+                  subtitle: 'PM templates and your submitted results',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const InspectionsHomeScreen(),
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 10),
+              if (entitlement.showWorkOrders)
+                HeevyListTile(
+                  icon: Icons.build_outlined,
+                  title: 'Work orders',
+                  subtitle: 'Create and view basic work orders',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const WorkOrdersListScreen(),
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 10),
+              if (entitlement.showFieldGuide)
+                HeevyListTile(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'Field guide',
+                  subtitle: 'AI assistant for your field data',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const FieldGuideScreen(),
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 10),
               HeevyListTile(
                 icon: Icons.history,
@@ -130,37 +184,48 @@ class InspectHomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              if (entitlement.showPmTemplates) ...[
-                const SizedBox(height: 10),
-                HeevyListTile(
-                  icon: Icons.fact_check_outlined,
-                  title: 'PM inspections',
-                  subtitle: 'Structured templates from your site',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PmTemplatesListScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
               const SizedBox(height: 10),
               HeevyListTile(
                 icon: Icons.rocket_launch_outlined,
                 title: 'Upgrade to Plant CMMS',
-                subtitle: 'Work orders, scheduling, stores',
+                subtitle: 'Scheduling, stores, full lifecycle',
                 accent: true,
-                onTap: () {
-                  Navigator.of(context).push(
+                onTap: () async {
+                  await Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const UpgradeScreen()),
                   );
+                  await InspectAnalytics.track('upgrade_click');
                 },
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _DisabledTile extends StatelessWidget {
+  const _DisabledTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: 0.5,
+      child: HeevyListTile(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        onTap: () {},
+      ),
     );
   }
 }

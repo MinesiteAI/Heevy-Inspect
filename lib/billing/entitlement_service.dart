@@ -46,6 +46,8 @@ class EntitlementResult {
     this.orgPack,
     this.allowsFieldCapture = true,
     this.allowsPlant = false,
+    this.allowsPmInspections = false,
+    this.allowsBasicWorkOrders = false,
   });
 
   final bool access;
@@ -64,11 +66,17 @@ class EntitlementResult {
   final List<String>? orgPack;
   final bool allowsFieldCapture;
   final bool allowsPlant;
+  final bool allowsPmInspections;
+  final bool allowsBasicWorkOrders;
 
   bool get isOrganizationMember =>
       source == 'organization' || companyManagesBilling;
 
-  bool get showPmTemplates => allowsPlant;
+  bool get showPmTemplates => allowsPmInspections;
+
+  bool get showWorkOrders => allowsBasicWorkOrders;
+
+  bool get showFieldGuide => allowsFieldCapture;
 
   factory EntitlementResult.fromJson(Map<String, dynamic> json) {
     DateTime? trial;
@@ -103,6 +111,8 @@ class EntitlementResult {
       orgPack: pack,
       allowsFieldCapture: json['allows_field_capture'] != false,
       allowsPlant: json['allows_plant'] == true,
+      allowsPmInspections: json['allows_pm_inspections'] == true,
+      allowsBasicWorkOrders: json['allows_basic_work_orders'] == true,
     );
   }
 
