@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/heevy_brand.dart';
 import '../../features/assets/asset_picker_sheet.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/heevy_ui.dart';
 import 'capture_service.dart';
 
 const _severities = ['P1 – Critical', 'P2 – High', 'P3 – Medium', 'P4 – Low'];
@@ -33,6 +35,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String? _assetId;
   String? _assetTag;
   bool _submitting = false;
+  String? _error;
 
   CaptureService get _svc => CaptureService(Supabase.instance.client);
 
@@ -48,6 +51,9 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.sheet(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (_) => const AssetPickerSheet(),
     );
     if (picked == null) return;
@@ -78,27 +84,50 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   }
 
   Future<void> _submit() async {
-    if (_notes.text.trim().isEmpty && _photos.isEmpty) return;
-    setState(() => _submitting = true);
+    if (_notes.text.trim().isEmpty && _photos.isEmpty) {
+      setState(() => _error = 'Add a photo or description before submitting.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      final urls = <String>[];
-      for (final p in _photos) {
-        urls.add(await _svc.uploadPhoto(p.bytes, p.mime, p.ext));
-      }
-      await _svc.submitFieldCapture(
+      final result = await _svc.submitFieldCapture(
         plantArea: _area.text.trim(),
         assetId: _assetId,
         assetTag: _assetTag,
         severity: _severity,
         notes: _notes.text.trim(),
-        photoUrls: urls,
+        photos: [
+          for (final p in _photos)
+            CapturePhoto(bytes: p.bytes, mime: p.mime, ext: p.ext),
+        ],
       );
       if (!mounted) return;
+      final wr = result['wr_number']?.toString();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            wr != null && wr.isNotEmpty
+                ? 'Capture submitted ($wr)'
+                : 'Capture submitted',
+          ),
+          backgroundColor: AppColors.surface(context),
+        ),
+      );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not submit: $e')),
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() => _error = message);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: const Color(0xFFFF453A),
+          duration: const Duration(seconds: 6),
+        ),
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -109,78 +138,137 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      appBar: AppBar(
-        title: const Text('Quick capture'),
-        backgroundColor: AppColors.bg(context),
-        foregroundColor: AppColors.text(context),
-      ),
+      appBar: const HeevyBrandedAppBar(title: 'Quick capture'),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          TextField(
-            controller: _area,
-            decoration: const InputDecoration(labelText: 'Area / location'),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _pickAsset,
-            icon: const Icon(Icons.precision_manufacturing_outlined),
-            label: Text(_assetTag ?? 'Pick asset (optional)'),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _severity,
-            decoration: const InputDecoration(labelText: 'Severity'),
-            items: [
-              for (final s in _severities)
-                DropdownMenuItem(value: s, child: Text(s)),
-            ],
-            onChanged: (v) => setState(() => _severity = v ?? _severity),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _notes,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              labelText: 'Notes',
-              hintText: 'Describe the defect or anomaly',
+          Text(
+            'Log a defect or anomaly in the field',
+            style: TextStyle(
+              color: AppColors.textMuted(context),
+              fontSize: 15,
+              height: 1.4,
             ),
+          ),
+          const SizedBox(height: 20),
+          HeevyField(
+            controller: _area,
+            hint: 'Area / location',
+            icon: Icons.place_outlined,
+          ),
+          const SizedBox(height: 10),
+          Material(
+            color: AppColors.surfaceAlt(context),
+            borderRadius: BorderRadius.circular(heevyRadius),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(heevyRadius),
+              onTap: _pickAsset,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.precision_manufacturing_outlined,
+                      color: AppColors.textMuted(context),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _assetTag ?? 'Pick asset (optional)',
+                        style: TextStyle(
+                          color: _assetTag != null
+                              ? AppColors.text(context)
+                              : AppColors.textFaint(context),
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: AppColors.textFaint(context)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAlt(context),
+              borderRadius: BorderRadius.circular(heevyRadius),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _severity,
+                isExpanded: true,
+                icon: Icon(Icons.expand_more, color: AppColors.textMuted(context)),
+                dropdownColor: AppColors.surface(context),
+                style: TextStyle(color: AppColors.text(context), fontSize: 16),
+                items: [
+                  for (final s in _severities)
+                    DropdownMenuItem(value: s, child: Text(s)),
+                ],
+                onChanged: (v) => setState(() => _severity = v ?? _severity),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          HeevyField(
+            controller: _notes,
+            hint: HeevyBrand.askHint,
+            icon: Icons.notes_outlined,
+            maxLines: 4,
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              OutlinedButton.icon(
-                onPressed: () => _addPhoto(ImageSource.camera),
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Camera'),
+              Expanded(
+                child: HeevySecondaryButton(
+                  label: 'Camera',
+                  onTap: () => _addPhoto(ImageSource.camera),
+                ),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: () => _addPhoto(ImageSource.gallery),
-                icon: const Icon(Icons.photo),
-                label: const Text('Gallery'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: HeevySecondaryButton(
+                  label: 'Gallery',
+                  onTap: () => _addPhoto(ImageSource.gallery),
+                ),
               ),
             ],
           ),
           if (_photos.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             SizedBox(
-              height: 88,
+              height: 96,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: _photos.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
                 itemBuilder: (_, i) => Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(_photos[i].bytes, width: 88, height: 88, fit: BoxFit.cover),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        _photos[i].bytes,
+                        width: 96,
+                        height: 96,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                     Positioned(
+                      top: 0,
                       right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => setState(() => _photos.removeAt(i)),
+                      child: Material(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: () => setState(() => _photos.removeAt(i)),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.close, size: 16, color: Colors.white),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -188,10 +276,27 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: Text(_submitting ? 'Submitting…' : 'Submit capture'),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF453A).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFF453A).withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Color(0xFFFF453A), fontSize: 14),
+              ),
+            ),
+          ],
+          const SizedBox(height: 28),
+          HeevyPrimaryButton(
+            label: _submitting ? 'Submitting…' : 'Submit capture',
+            loading: _submitting,
+            onTap: _submit,
           ),
         ],
       ),

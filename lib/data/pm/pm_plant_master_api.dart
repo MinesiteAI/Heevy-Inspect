@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../workspace_context.dart';
 import 'pm_schedule_templates_api.dart';
 import 'pm_tasks_form_bridge.dart';
 
@@ -254,9 +255,13 @@ Future<List<PlantPmInspectionRow>> fetchPlantPmInspectionTemplates(
   return out;
 }
 
-String plantPmDisplayHeadline(PlantPmInspectionRow r, {String siteName = 'Tennant Creek'}) {
-  final area = r.plantArea.trim();
-  final title = r.pmName.trim().isNotEmpty ? r.pmName.trim() : 'PM';
-  if (area.isEmpty) return '$siteName — $title';
-  return '$siteName $area - $title';
+String plantPmDisplayHeadline(
+  PlantPmInspectionRow r, {
+  String? siteName,
+}) {
+  return composePmHeadline(
+    siteDisplayName: siteName,
+    area: r.plantArea,
+    title: r.pmName,
+  );
 }

@@ -29,13 +29,37 @@ abstract final class HeevyUrls {
   static Uri authForSetupPortal({String? email}) =>
       auth(redirect: '/my-application?source=heevy_inspect', email: email);
 
+  static Uri authForApply({String? email}) =>
+      auth(redirect: '/apply?source=heevy_inspect', email: email);
+
   static Uri terms() => Uri.parse('$appBase/terms');
   static Uri privacy() => Uri.parse('$appBase/privacy');
 
-  static Uri? resolveDeepLink(Uri uri) {
+  static Uri? resolveDeepLink(Uri uri, {String? email}) {
     if (uri.scheme == 'heevy-inspect') {
-      return authForSetupPortal();
+      final host = uri.host.toLowerCase();
+      final path = uri.path.toLowerCase();
+      if (host == 'apply' || path == '/apply') {
+        return apply(source: 'heevy_inspect');
+      }
+      if (host == 'upgrade' || path == '/upgrade') {
+        return captureUpgrade();
+      }
+      if (host == 'capture' && path.startsWith('/upgrade')) {
+        return captureUpgrade();
+      }
+      return authForSetupPortal(email: email);
     }
+
+    if (uri.scheme == 'https' || uri.scheme == 'http') {
+      final path = uri.path.toLowerCase();
+      if (path.startsWith('/capture/upgrade')) return captureUpgrade();
+      if (path.startsWith('/apply')) return apply(source: 'heevy_inspect');
+      if (path.startsWith('/my-application')) {
+        return authForSetupPortal(email: email);
+      }
+    }
+
     return null;
   }
 }

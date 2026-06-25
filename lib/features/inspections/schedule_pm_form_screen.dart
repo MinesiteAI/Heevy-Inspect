@@ -10,12 +10,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/workspace_context.dart';
 import 'pm_generate_work_order_ui.dart';
 
 const _kFormBg = Color(0xFFFDFBF6);
 const _kFormInk = Color(0xFF1A1A1A);
 const _kFormMuted = Color(0xFF6B6B6B);
-const _kSiteHeadlinePrefix = 'Tennant Creek';
 
 /// Typed text must not inherit a washed-out theme color on [_kFormBg].
 const TextStyle _kPmFieldTextStyle = TextStyle(
@@ -77,6 +77,8 @@ class SchedulePmFormScreen extends StatefulWidget {
   final String? mobileWorkOrderId;
   /// Existing `pm_form_submissions.id` when continuing or updating a draft.
   final String? draftSubmissionId;
+  /// Company or mine site label from the user's provisioned workspace.
+  final String? siteDisplayName;
 
   const SchedulePmFormScreen({
     super.key,
@@ -86,6 +88,7 @@ class SchedulePmFormScreen extends StatefulWidget {
     required this.formStructure,
     this.initialSubmission,
     this.readOnly = false,
+    this.siteDisplayName,
     this.mobileLineItemId,
     this.mobileAssignmentId,
     this.mobileWorkOrderId,
@@ -159,19 +162,21 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
   }
 
   String _composeHeadlinePreview() {
-    final area = _plantAreaCtrl.text.trim();
-    final title = _pmTitleCtrl.text.trim().isEmpty ? 'PM' : _pmTitleCtrl.text.trim();
-    if (area.isEmpty) return '$_kSiteHeadlinePrefix — $title';
-    return '$_kSiteHeadlinePrefix $area - $title';
+    return composePmHeadline(
+      siteDisplayName: widget.siteDisplayName,
+      area: _plantAreaCtrl.text,
+      title: _pmTitleCtrl.text,
+    );
   }
 
   String _readOnlyHeadline() {
     final h = (widget.pmTemplateShell['display_headline'] as String?)?.trim();
     if (h != null && h.isNotEmpty) return h;
-    final area = (widget.pmTemplateShell['plant_area'] as String?)?.trim() ?? '';
-    final title = (widget.pmTemplateShell['pm_title'] as String?)?.trim() ?? 'PM';
-    if (area.isEmpty) return '$_kSiteHeadlinePrefix — $title';
-    return '$_kSiteHeadlinePrefix $area - $title';
+    return composePmHeadline(
+      siteDisplayName: widget.siteDisplayName,
+      area: (widget.pmTemplateShell['plant_area'] as String?) ?? '',
+      title: (widget.pmTemplateShell['pm_title'] as String?) ?? 'PM',
+    );
   }
 
   void _hydrateFromSubmission() {

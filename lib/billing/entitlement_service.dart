@@ -120,7 +120,15 @@ class EntitlementService {
   final SupabaseClient _client;
 
   Future<EntitlementResult> check() async {
-    final res = await _client.functions.invoke('check-entitlement', body: {});
+    final FunctionResponse res;
+    try {
+      res = await _client.functions.invoke('check-entitlement', body: {});
+    } catch (e) {
+      throw Exception(e.toString().replaceFirst('Exception: ', ''));
+    }
+    if (res.status == 401 || res.status == 403) {
+      throw Exception('Unauthorized (${res.status})');
+    }
     if (res.status != 200) return EntitlementResult.denied;
     final data = res.data;
     if (data is Map<String, dynamic>) {

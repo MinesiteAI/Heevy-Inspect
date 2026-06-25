@@ -19,6 +19,63 @@ function str(v: unknown): string {
   return (v ?? "").toString().trim();
 }
 
+function extForMime(mime: string): string {
+  const m = mime.toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("heic")) return "heic";
+  return "jpg";
+}
+
+function decodeBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function uploadCapturePhotos(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<string[]> {
+  const urls = Array.isArray(body.photo_urls)
+    ? body.photo_urls.map((u) => str(u)).filter(Boolean)
+    : [];
+
+  const payloads = Array.isArray(body.photo_payloads) ? body.photo_payloads : [];
+  for (let i = 0; i < payloads.length; i++) {
+    const item = payloads[i];
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const b64 = str(row.data_base64);
+    if (!b64) continue;
+
+    const mime = str(row.mime) || "image/jpeg";
+    const ext = str(row.ext) || extForMime(mime);
+    const path = `field-capture/${userId}/${Date.now()}_${i}.${ext.replace(/^\./, "")}`;
+    const bytes = decodeBase64(b64);
+
+    const { error: upErr } = await admin.storage
+      .from("inspection-uploads")
+      .upload(path, bytes, { contentType: mime, upsert: false });
+    if (upErr) {
+      throw new Error(`Photo upload failed: ${upErr.message}`);
+    }
+
+    const { data: signed, error: signErr } = await admin.storage
+      .from("inspection-uploads")
+      .createSignedUrl(path, 60 * 60 * 24 * 365);
+    if (signErr || !signed?.signedUrl) {
+      urls.push(`inspection-uploads/${path}`);
+    } else {
+      urls.push(signed.signedUrl);
+    }
+  }
+
+  return urls;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
@@ -45,11 +102,16 @@ Deno.serve(async (req) => {
     const severity = str(body.severity) || "Medium";
     const notes = str(body.notes);
     const voiceTranscript = str(body.voice_transcript);
-    const photoUrls = Array.isArray(body.photo_urls)
-      ? body.photo_urls.map((u) => str(u)).filter(Boolean)
-      : [];
 
     const admin = createClient(SUPABASE_URL, serviceRole);
+
+    let photoUrls: string[];
+    try {
+      photoUrls = await uploadCapturePhotos(admin, userRes.user.id, body);
+    } catch (uploadErr) {
+      const msg = uploadErr instanceof Error ? uploadErr.message : "Photo upload failed";
+      return json({ error: msg }, 500);
+    }
 
     const { data: profile } = await admin
       .from("profiles")
@@ -58,7 +120,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     let mineSiteId: string | null = str(body.mine_site_id) || null;
-    let organizationId = profile?.organization_id ?? null;
+    const organizationId = profile?.organization_id ?? null;
 
     if (!mineSiteId && organizationId) {
       const { data: site } = await admin
@@ -130,6 +192,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("mobile-submit-field-capture:", e);
-    return json({ error: "Internal server error" }, 500);
+    const msg = e instanceof Error ? e.message : "Internal server error";
+    return json({ error: msg }, 500);
   }
 });

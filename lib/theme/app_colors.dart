@@ -20,6 +20,10 @@ abstract final class AppColors {
   static Color border(BuildContext c) =>
       isDark(c) ? const Color(0xFF3A3A3C) : const Color(0xFFD1D1D6);
   static Color text(BuildContext c) => isDark(c) ? Colors.white : Colors.black;
+  static Color textMuted(BuildContext c) =>
+      isDark(c) ? Colors.white70 : Colors.black54;
+  static Color textFaint(BuildContext c) =>
+      isDark(c) ? Colors.white54 : Colors.black45;
   static Color get muted => const Color(0xFF8E8E93);
   static Color inverseBg(BuildContext c) =>
       isDark(c) ? Colors.white : Colors.black;
