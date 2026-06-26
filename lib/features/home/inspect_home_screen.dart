@@ -11,6 +11,7 @@ import '../../theme/theme_mode.dart';
 import '../../widgets/field_guide_fab.dart';
 import '../../widgets/heevy_brand_title.dart';
 import '../../widgets/heevy_ui.dart';
+import '../../widgets/supervisor_home_strip.dart';
 import '../capture/capture_history_screen.dart';
 import '../capture/quick_capture_screen.dart';
 import '../inspections/inspections_home_screen.dart';
@@ -31,6 +32,7 @@ class InspectHomeScreen extends StatefulWidget {
 class _InspectHomeScreenState extends State<InspectHomeScreen> {
   int _offlinePending = 0;
   int _unreadNotifications = 0;
+  SupervisorSummary? _supervisorSummary;
 
   @override
   void initState() {
@@ -42,14 +44,24 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
     final client = Supabase.instance.client;
     final pending = await OfflineSyncService(client).pendingCount();
     var unread = 0;
+    SupervisorSummary? supervisor;
     try {
       final page = await NotificationService(client).list(limit: 1);
       unread = page.unreadCount;
     } catch (_) {}
+    if (widget.entitlement.isOrgManager) {
+      try {
+        supervisor = await SupervisorHomeStrip.load(
+          client,
+          isOrgManager: true,
+        );
+      } catch (_) {}
+    }
     if (mounted) {
       setState(() {
         _offlinePending = pending;
         _unreadNotifications = unread;
+        _supervisorSummary = supervisor;
       });
     }
   }
@@ -204,6 +216,12 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
                   ),
                 ),
               ],
+              if (_supervisorSummary != null)
+                SupervisorHomeStrip(
+                  entitlement: entitlement,
+                  summary: _supervisorSummary!,
+                  onRefresh: _refreshBadges,
+                ),
               const SizedBox(height: 24),
               Text(
                 'What would you like to do?',

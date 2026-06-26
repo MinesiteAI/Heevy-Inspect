@@ -165,7 +165,7 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           Text(
-            'Creates a draft work request for your site. Submit for approval on web or upgrade to Plant CMMS.',
+            'Creates a draft work request for your site. Open the request and tap Submit to site queue to notify your supervisor.',
             style: TextStyle(color: AppColors.textMuted(context), height: 1.4),
           ),
           const SizedBox(height: 16),

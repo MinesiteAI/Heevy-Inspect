@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/pm/pm_schedule_templates_api.dart';
+import '../../data/workspace_context.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import 'pm_schedule_service.dart';
+import 'schedule_pm_form_screen.dart';
 
 class PmScheduleInboxScreen extends StatefulWidget {
   const PmScheduleInboxScreen({super.key});
@@ -36,6 +39,55 @@ class _PmScheduleInboxScreenState extends State<PmScheduleInboxScreen> {
     return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
+  Future<void> _openScheduledPm(Map<String, dynamic> row) async {
+    final templateId = row['pm_template_id']?.toString() ?? '';
+    if (templateId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PM template not linked to this schedule.')),
+      );
+      return;
+    }
+
+    final client = Supabase.instance.client;
+    final template = await fetchPMScheduleTemplateById(client, templateId);
+    if (!mounted) return;
+
+    if (template == null || template.formStructure == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Checklist not found — open PM templates or provision on web.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final workspace = await fetchWorkspaceContext(client);
+    if (!mounted) return;
+
+    final scheduleName = row['pm_template_name']?.toString();
+    final instanceId = row['id']?.toString();
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SchedulePmFormScreen(
+          pmTemplateShell: template.toPmTemplateShellMap(),
+          scheduleTemplateId: template.id,
+          scheduleName: scheduleName,
+          formStructure: template.formStructure!,
+          scheduledInstanceId: instanceId,
+          siteDisplayName:
+              workspace.siteDisplayName.isNotEmpty
+                  ? workspace.siteDisplayName
+                  : null,
+        ),
+      ),
+    );
+    if (mounted) await _refresh();
+  }
+
   Widget _section(String title, List<Map<String, dynamic>> items, {Color? accent}) {
     if (items.isEmpty) return const SizedBox.shrink();
     return Column(
@@ -63,7 +115,7 @@ class _PmScheduleInboxScreenState extends State<PmScheduleInboxScreen> {
               icon: Icons.event_note_outlined,
               title: name,
               subtitle: [date, area, status].where((s) => s.isNotEmpty).join(' · '),
-              onTap: () {},
+              onTap: () => _openScheduledPm(row),
             ),
           );
         }),
@@ -138,7 +190,7 @@ class _PmScheduleInboxScreenState extends State<PmScheduleInboxScreen> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
               children: [
                 Text(
-                  'Due and overdue PM inspections for your site.',
+                  'Tap a scheduled PM to run the checklist.',
                   style: TextStyle(color: AppColors.textMuted(context), height: 1.4),
                 ),
                 _section(

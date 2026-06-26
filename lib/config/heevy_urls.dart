@@ -19,6 +19,9 @@ abstract final class HeevyUrls {
   static Uri workRequestOnWeb(String workRequestId) =>
       Uri.parse('$appBase/plant/work-requests?id=$workRequestId');
 
+  /// Minesite companion app — web landing until a dedicated App Store ID is set.
+  static Uri minesiteMobileApp() => Uri.parse('$appBase/mobile');
+
   static Uri auth({String? redirect, String? email}) {
     final params = <String, String>{'brand': 'heevy_inspect'};
     if (redirect != null && redirect.isNotEmpty) params['redirect'] = redirect;

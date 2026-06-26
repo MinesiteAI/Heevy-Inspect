@@ -10,10 +10,19 @@ import 'create_work_request_screen.dart';
 import 'work_request_detail_screen.dart';
 import 'work_request_service.dart';
 
+enum TeamWrFilter { submitted, drafts, all }
+
 class WorkRequestsListScreen extends StatefulWidget {
-  const WorkRequestsListScreen({super.key, this.entitlement});
+  const WorkRequestsListScreen({
+    super.key,
+    this.entitlement,
+    this.initialScope,
+    this.initialTeamFilter,
+  });
 
   final EntitlementResult? entitlement;
+  final String? initialScope;
+  final TeamWrFilter? initialTeamFilter;
 
   @override
   State<WorkRequestsListScreen> createState() => _WorkRequestsListScreenState();
@@ -21,13 +30,17 @@ class WorkRequestsListScreen extends StatefulWidget {
 
 class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
   late Future<Map<String, dynamic>> _future;
-  String _scope = 'mine';
+  late String _scope;
+  TeamWrFilter _teamFilter = TeamWrFilter.submitted;
+  String? _priorityFilter;
 
   bool get _showTeamTab => widget.entitlement?.isOrgManager == true;
 
   @override
   void initState() {
     super.initState();
+    _scope = widget.initialScope ?? 'mine';
+    _teamFilter = widget.initialTeamFilter ?? TeamWrFilter.submitted;
     _reload();
   }
 
@@ -47,8 +60,42 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
     if (_scope == scope) return;
     setState(() {
       _scope = scope;
+      if (scope == 'team') {
+        _teamFilter = TeamWrFilter.submitted;
+      }
       _reload();
     });
+  }
+
+  List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> items) {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    return items.where((row) {
+      final status = (row['status']?.toString() ?? '').toLowerCase();
+      final isDraft = status == 'draft';
+      final createdBy = row['created_by']?.toString();
+      final isOwn = createdBy != null && createdBy == uid;
+
+      if (_scope == 'team') {
+        switch (_teamFilter) {
+          case TeamWrFilter.submitted:
+            if (isDraft) return false;
+            break;
+          case TeamWrFilter.drafts:
+            if (!isDraft || isOwn) return false;
+            break;
+          case TeamWrFilter.all:
+            break;
+        }
+      }
+
+      if (_priorityFilter != null && _priorityFilter!.isNotEmpty) {
+        final p = (row['priority']?.toString() ?? '').toLowerCase();
+        final needle = _priorityFilter!.toLowerCase();
+        if (!p.contains(needle)) return false;
+      }
+
+      return true;
+    }).toList();
   }
 
   Future<void> _openCreate() async {
@@ -71,6 +118,49 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
     if (s == 'open') return 'Open';
     if (s == 'pending approval') return 'Pending approval';
     return status ?? '';
+  }
+
+  Widget _teamFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          FilterChip(
+            label: const Text('Submitted'),
+            selected: _teamFilter == TeamWrFilter.submitted,
+            onSelected: (_) => setState(() => _teamFilter = TeamWrFilter.submitted),
+          ),
+          FilterChip(
+            label: const Text('Crew drafts'),
+            selected: _teamFilter == TeamWrFilter.drafts,
+            onSelected: (_) => setState(() => _teamFilter = TeamWrFilter.drafts),
+          ),
+          FilterChip(
+            label: const Text('All'),
+            selected: _teamFilter == TeamWrFilter.all,
+            onSelected: (_) => setState(() => _teamFilter = TeamWrFilter.all),
+          ),
+          DropdownButton<String?>(
+            value: _priorityFilter,
+            hint: Text(
+              'Priority',
+              style: TextStyle(color: AppColors.textMuted(context), fontSize: 13),
+            ),
+            underline: const SizedBox.shrink(),
+            items: const [
+              DropdownMenuItem(value: null, child: Text('All priorities')),
+              DropdownMenuItem(value: 'p1', child: Text('P1')),
+              DropdownMenuItem(value: 'p2', child: Text('P2')),
+              DropdownMenuItem(value: 'p3', child: Text('P3')),
+              DropdownMenuItem(value: 'p4', child: Text('P4')),
+            ],
+            onChanged: (v) => setState(() => _priorityFilter = v),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -97,6 +187,7 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
               onScopeChanged: _setScope,
               teamLabel: 'Site team',
             ),
+          if (_scope == 'team') _teamFilterBar(),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
@@ -135,9 +226,10 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                     );
                   }
                   final meta = snapshot.data ?? {};
-                  final items = meta['items'] is List
+                  final rawItems = meta['items'] is List
                       ? List<Map<String, dynamic>>.from(meta['items'] as List)
                       : <Map<String, dynamic>>[];
+                  final items = _applyFilters(rawItems);
                   if (items.isEmpty) {
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -147,10 +239,12 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                         HeevyEmptyState(
                           icon: Icons.assignment_outlined,
                           title: _scope == 'team'
-                              ? 'No team work requests'
+                              ? 'No matching team requests'
                               : 'No work requests yet',
                           subtitle: _scope == 'team'
-                              ? 'Crew submissions appear here when they log defects or create requests.'
+                              ? _teamFilter == TeamWrFilter.drafts
+                                  ? 'No crew drafts waiting — switch to Submitted to see the site queue.'
+                                  : 'Crew submissions appear here after they submit to the site queue.'
                               : 'Create a draft request for your site, or use Quick capture with photos.',
                         ),
                         if (_scope == 'mine') ...[

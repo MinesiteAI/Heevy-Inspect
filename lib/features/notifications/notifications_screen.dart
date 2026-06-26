@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../notifications/notification_router.dart';
 import '../../notifications/notification_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
@@ -54,11 +55,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _load();
   }
 
-  Future<void> _markRead(AppNotification n) async {
-    if (n.read) return;
-    try {
-      await _service.update(n.id, 'mark_read');
-    } catch (_) {}
+  Future<void> _openNotification(AppNotification n) async {
+    if (!n.read) {
+      try {
+        await _service.update(n.id, 'mark_read');
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    await NotificationRouter.open(context, n);
     await _load();
   }
 
@@ -140,7 +144,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(14),
-                      onTap: () => _markRead(n),
+                      onTap: () => _openNotification(n),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(

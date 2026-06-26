@@ -12,6 +12,7 @@ import '../../features/assets/asset_picker_sheet.dart';
 import '../../sync/offline_queue.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
+import '../work_requests/work_request_detail_screen.dart';
 import 'capture_service.dart';
 
 const _severities = ['P1 – Critical', 'P2 – High', 'P3 – Medium', 'P4 – Low'];
@@ -117,17 +118,33 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       }
       if (!mounted) return;
       final wr = result['wr_number']?.toString();
+      final wrId = result['work_request_id']?.toString();
       final wo = result['work_order_number']?.toString();
+      final baseMsg = wo != null && wo.isNotEmpty
+          ? 'Capture saved ($wr) · WO $wo'
+          : wr != null && wr.isNotEmpty
+          ? 'Draft saved ($wr)'
+          : 'Capture saved';
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            wo != null && wo.isNotEmpty
-                ? 'Capture submitted ($wr) · WO $wo'
-                : wr != null && wr.isNotEmpty
-                ? 'Capture submitted ($wr)'
-                : 'Capture submitted',
+            '$baseMsg — submit to site queue to notify your supervisor.',
           ),
           backgroundColor: AppColors.surface(context),
+          duration: const Duration(seconds: 8),
+          action: wrId != null && wrId.isNotEmpty
+              ? SnackBarAction(
+                  label: 'Submit now',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            WorkRequestDetailScreen(workRequestId: wrId),
+                      ),
+                    );
+                  },
+                )
+              : null,
         ),
       );
       Navigator.of(context).pop(true);

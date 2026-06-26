@@ -78,6 +78,8 @@ class SchedulePmFormScreen extends StatefulWidget {
   final String? mobileWorkOrderId;
   /// Existing `pm_form_submissions.id` when continuing or updating a draft.
   final String? draftSubmissionId;
+  /// Scheduled PM instance from calendar (`scheduled_pm_instances.id`).
+  final String? scheduledInstanceId;
   /// Company or mine site label from the user's provisioned workspace.
   final String? siteDisplayName;
 
@@ -94,6 +96,7 @@ class SchedulePmFormScreen extends StatefulWidget {
     this.mobileAssignmentId,
     this.mobileWorkOrderId,
     this.draftSubmissionId,
+    this.scheduledInstanceId,
   });
 
   @override
@@ -746,6 +749,9 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
               'submitter_email': user?.email,
               'form_values': p.formValuesOut,
               'notes': p.notesOut,
+              if (widget.scheduledInstanceId != null &&
+                  widget.scheduledInstanceId!.trim().isNotEmpty)
+                'scheduled_instance_id': widget.scheduledInstanceId!.trim(),
             },
           },
         );
@@ -819,6 +825,9 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
                   'submitter_email': user?.email,
                   'form_values': p.formValuesOut,
                   'notes': p.notesOut,
+                  if (widget.scheduledInstanceId != null &&
+                      widget.scheduledInstanceId!.trim().isNotEmpty)
+                    'scheduled_instance_id': widget.scheduledInstanceId!.trim(),
                 },
               },
             ),

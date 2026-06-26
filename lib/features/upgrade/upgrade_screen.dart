@@ -86,9 +86,9 @@ class UpgradeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           HeevySecondaryButton(
-            label: 'Get Heevy Mining app',
+            label: 'Learn about Heevy Mining',
             onTap: () => launchUrl(
-              Uri.parse('https://apps.apple.com'),
+              HeevyUrls.minesiteMobileApp(),
               mode: LaunchMode.externalApplication,
             ),
           ),
