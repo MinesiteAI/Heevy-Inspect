@@ -52,6 +52,57 @@ Deno.serve(async (req) => {
     const sourceType = str(wo.source_type) || str(body.source_type) || "manual";
     const sourceId = str(wo.source_id) || str(body.source_id);
 
+    if (sourceType === "work_request" && sourceId) {
+      const { data: wr, error: wrErr } = await admin
+        .from("work_requests")
+        .select("id, status, linked_wo_id, mine_site_id, created_by")
+        .eq("id", sourceId)
+        .maybeSingle();
+      if (wrErr) return json({ error: wrErr.message }, 500);
+      if (!wr) return json({ error: "Work request not found" }, 404);
+
+      const wrStatus = str(wr.status).toLowerCase();
+      if (wrStatus === "draft" || wrStatus === "pending approval") {
+        return json({
+          error: "Work request must be approved on web before creating a work order",
+        }, 400);
+      }
+
+      const woSelect =
+        "id, work_order_number, title, status, priority, created_at";
+
+      if (wr.linked_wo_id) {
+        const { data: existing } = await admin
+          .from("work_orders")
+          .select(woSelect)
+          .eq("id", wr.linked_wo_id)
+          .maybeSingle();
+        if (existing) {
+          return json({ ok: true, work_order: existing, already_linked: true });
+        }
+      }
+
+      const { data: fromSource } = await admin
+        .from("work_orders")
+        .select(woSelect)
+        .eq("source_type", "work_request")
+        .eq("source_id", sourceId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (fromSource) {
+        await admin
+          .from("work_requests")
+          .update({
+            linked_wo_id: fromSource.id,
+            status: "Converted to WO",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", sourceId);
+        return json({ ok: true, work_order: fromSource, already_linked: true });
+      }
+    }
+
     let photoUrls: string[] = [];
     if (body.photo_payloads || body.photo_urls) {
       photoUrls = await uploadPhotosFromPayloads(admin, auth.userId, body, "work-orders");
@@ -79,6 +130,17 @@ Deno.serve(async (req) => {
       .single();
 
     if (error) return json({ error: error.message }, 500);
+
+    if (sourceType === "work_request" && sourceId && created?.id) {
+      await admin
+        .from("work_requests")
+        .update({
+          linked_wo_id: created.id,
+          status: "Converted to WO",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sourceId);
+    }
 
     await writeAuditLog(admin, {
       userId: auth.userId,

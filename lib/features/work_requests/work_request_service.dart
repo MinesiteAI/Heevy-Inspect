@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/mobile_function_client.dart';
 import '../capture/capture_service.dart';
 
 class WorkRequestService {
@@ -9,10 +10,12 @@ class WorkRequestService {
 
   final SupabaseClient _client;
 
+  MobileFunctionClient get _fn => MobileFunctionClient(_client);
+
   Future<Map<String, dynamic>> listWorkRequestsMeta({
     String scope = 'mine',
   }) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-list-work-requests',
       body: {'scope': scope},
     );
@@ -34,7 +37,7 @@ class WorkRequestService {
   }
 
   Future<Map<String, dynamic>> getWorkRequest(String id) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-get-work-request',
       body: {'id': id},
     );
@@ -47,7 +50,7 @@ class WorkRequestService {
   }
 
   Future<Map<String, dynamic>> acknowledgeWorkRequest(String id) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-acknowledge-work-request',
       body: {'id': id},
     );
@@ -58,7 +61,7 @@ class WorkRequestService {
   }
 
   Future<Map<String, dynamic>> submitWorkRequest(String id) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-submit-work-request',
       body: {'id': id},
     );
@@ -88,7 +91,7 @@ class WorkRequestService {
           'data_base64': base64Encode(p.bytes),
         },
     ];
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-create-work-request',
       body: {
         'work_request': {

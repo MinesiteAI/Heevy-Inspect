@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../billing/entitlement_service.dart';
+import '../../billing/upgrade_cta_policy.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import 'create_work_order_screen.dart';
@@ -34,21 +35,29 @@ class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final entitlement = widget.entitlement;
+    final canCreate = entitlement != null &&
+        UpgradeCtaPolicy.canCreateWorkOrderOnMobile(
+          isOrgManager: entitlement.isOrgManager,
+          allowsPlant: entitlement.allowsPlant,
+        );
+
     return Scaffold(
       backgroundColor: AppColors.bg(context),
       appBar: HeevyBrandedAppBar(
         title: 'Work orders',
         actions: [
-          IconButton(
-            tooltip: 'Create',
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CreateWorkOrderScreen()),
-              );
-              await _refresh();
-            },
-            icon: Icon(Icons.add, color: AppColors.textMuted(context)),
-          ),
+          if (canCreate)
+            IconButton(
+              tooltip: 'Create',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CreateWorkOrderScreen()),
+                );
+                await _refresh();
+              },
+              icon: Icon(Icons.add, color: AppColors.textMuted(context)),
+            ),
         ],
       ),
       body: RefreshIndicator(
@@ -90,12 +99,14 @@ class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
             if (items.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 80),
+                children: [
+                  const SizedBox(height: 80),
                   HeevyEmptyState(
                     icon: Icons.build_outlined,
                     title: 'No work orders yet',
-                    subtitle: 'Create one from a capture, PM defect, or blank.',
+                    subtitle: canCreate
+                        ? 'Create one from an approved request or tap + above.'
+                        : 'Work orders appear here after supervisor approval on web.',
                   ),
                 ],
               );
@@ -133,16 +144,18 @@ class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const CreateWorkOrderScreen()),
-          );
-          await _refresh();
-        },
-        backgroundColor: AppColors.text(context),
-        child: Icon(Icons.add, color: AppColors.bg(context)),
-      ),
+      floatingActionButton: canCreate
+          ? FloatingActionButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CreateWorkOrderScreen()),
+                );
+                await _refresh();
+              },
+              backgroundColor: AppColors.text(context),
+              child: Icon(Icons.add, color: AppColors.bg(context)),
+            )
+          : null,
     );
   }
 }

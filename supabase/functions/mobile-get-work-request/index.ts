@@ -92,17 +92,34 @@ Deno.serve(async (req) => {
     let linkedWo: Record<string, unknown> | null = null;
     let linkedWoAccessible = false;
     const woId = wr.linked_wo_id as string | null;
+    const woSelect =
+      "id, work_order_number, title, status, priority";
+
     if (woId) {
       const { data: wo } = await admin
         .from("work_orders")
-        .select("id, work_order_number, title, status, priority")
+        .select(woSelect)
         .eq("id", woId)
         .maybeSingle();
       linkedWo = wo as Record<string, unknown> | null;
-      if (linkedWo) {
+    } else {
+      const { data: sourceWo } = await admin
+        .from("work_orders")
+        .select(woSelect)
+        .eq("source_type", "work_request")
+        .eq("source_id", id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      linkedWo = sourceWo as Record<string, unknown> | null;
+    }
+
+    if (linkedWo) {
+      const resolvedWoId = str(linkedWo.id);
+      if (resolvedWoId) {
         linkedWoAccessible = await isWorkOrderAccessible(
           admin,
-          woId,
+          resolvedWoId,
           workspace,
           auth.userId,
         );

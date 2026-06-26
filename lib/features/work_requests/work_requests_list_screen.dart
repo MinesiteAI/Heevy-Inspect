@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../billing/entitlement_service.dart';
+import '../../data/mobile_function_client.dart';
+import '../../config/field_copy.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import '../../widgets/history_card.dart';
@@ -121,19 +123,24 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
   }
 
   Future<void> _openQuickCapture() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const QuickCaptureScreen()),
+    final result = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute(
+        builder: (_) => QuickCaptureScreen(entitlement: widget.entitlement),
+      ),
     );
+    if (!mounted) return;
+    if (result is Map && result['message'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'].toString()),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
     if (mounted) await _refresh();
   }
 
-  String _statusLabel(String? status) {
-    final s = (status ?? '').toLowerCase();
-    if (s == 'draft') return 'Draft';
-    if (s == 'open') return 'Open';
-    if (s == 'pending approval') return 'Pending approval';
-    return status ?? '';
-  }
+  String _statusLabel(String? status) => FieldCopy.workRequestStatus(status);
 
   Widget _soloBanner() {
     if (!_showTeamTab || _teamItemsFuture == null) {
@@ -195,6 +202,17 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
     );
   }
 
+  String _friendlyLoadError(Object error) {
+    if (isMobileAuthError(error)) {
+      return 'Session expired — sign in again.';
+    }
+    return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  Future<void> _signInAgain() async {
+    await Supabase.instance.client.auth.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -246,15 +264,28 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                     );
                   }
                   if (snapshot.hasError) {
+                    final authError = isMobileAuthError(snapshot.error!);
                     return ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
                         const SizedBox(height: 80),
                         HeevyEmptyState(
                           icon: Icons.error_outline,
-                          title: 'Could not load work requests',
-                          subtitle: snapshot.error.toString(),
+                          title: authError
+                              ? 'Sign in again'
+                              : 'Could not load work requests',
+                          subtitle: _friendlyLoadError(snapshot.error!),
                         ),
+                        if (authError) ...[
+                          const SizedBox(height: 24),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: HeevyPrimaryButton(
+                              label: 'Sign in again',
+                              onTap: _signInAgain,
+                            ),
+                          ),
+                        ],
                       ],
                     );
                   }
@@ -278,7 +309,7 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                               ? _teamFilter == TeamWrFilter.drafts
                                   ? 'No crew drafts waiting — switch to Submitted to see the site queue.'
                                   : 'Crew submissions appear here after they submit to the site queue.'
-                              : 'Create a draft request for your site, or use Quick capture with photos.',
+                              : 'Create a draft request for your site, or report a defect with a photo.',
                         ),
                         if (_scope == 'mine') ...[
                           const SizedBox(height: 24),
@@ -288,7 +319,7 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                           ),
                           const SizedBox(height: 10),
                           HeevySecondaryButton(
-                            label: 'Or use Quick capture',
+                            label: FieldCopy.wrEmptyQuickCapture,
                             onTap: _openQuickCapture,
                           ),
                         ],

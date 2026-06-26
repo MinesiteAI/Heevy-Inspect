@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/mobile_function_client.dart';
 import '../capture/capture_service.dart';
 
 class WorkOrderService {
@@ -9,8 +10,10 @@ class WorkOrderService {
 
   final SupabaseClient _client;
 
+  MobileFunctionClient get _fn => MobileFunctionClient(_client);
+
   Future<List<Map<String, dynamic>>> listWorkOrders() async {
-    final res = await _client.functions.invoke('mobile-list-work-orders', body: {});
+    final res = await _fn.invoke('mobile-list-work-orders', body: {});
     if (res.status >= 400) {
       throw Exception(_error(res));
     }
@@ -22,7 +25,7 @@ class WorkOrderService {
   }
 
   Future<Map<String, dynamic>> getWorkOrder(String id) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-get-work-order',
       body: {'id': id},
     );
@@ -53,7 +56,7 @@ class WorkOrderService {
           'data_base64': base64Encode(p.bytes),
         },
     ];
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-create-work-order',
       body: {
         'work_order': {

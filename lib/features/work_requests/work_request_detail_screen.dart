@@ -117,6 +117,11 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
     }
   }
 
+  bool _canCreateWorkOrder(String status) {
+    final s = status.toLowerCase();
+    return s == 'approved' || s == 'open';
+  }
+
   String _statusMessage(String? status, {required bool readOnly}) {
     final s = (status ?? '').toLowerCase();
     if (s == 'draft') {
@@ -356,7 +361,18 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                     mode: LaunchMode.externalApplication,
                   ),
                 ),
-              ] else if (!readOnly) ...[
+              ] else if (!readOnly && status.toLowerCase() == 'pending approval') ...[
+                const SizedBox(height: 10),
+                HeevyListTile(
+                  icon: Icons.schedule_outlined,
+                  title: 'Work order after approval',
+                  subtitle: 'Approve this request on web Plant CMMS first',
+                  onTap: () => launchUrl(
+                    HeevyUrls.workRequestOnWeb(widget.workRequestId),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ] else if (!readOnly && _canCreateWorkOrder(status)) ...[
                 const SizedBox(height: 10),
                 HeevyListTile(
                   icon: Icons.build_outlined,

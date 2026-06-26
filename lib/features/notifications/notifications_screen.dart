@@ -28,17 +28,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final page = await _service.list(limit: 100);
+      if (!mounted) return;
       setState(() {
         _items = page.items;
         _unreadCount = page.unreadCount;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);

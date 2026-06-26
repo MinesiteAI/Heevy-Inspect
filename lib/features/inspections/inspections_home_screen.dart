@@ -47,6 +47,8 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
   Widget build(BuildContext context) {
     final entitlement = _entitlement;
     final limit = entitlement.pmTemplateLimitPerDiscipline;
+    final canCreateTemplate =
+        entitlement.allowsPmTemplateCreate && entitlement.isOrgManager;
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -63,9 +65,11 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
               ),
             ),
           Text(
-            limit != null
-                ? 'Run PM templates or create your own (up to $limit per discipline).'
-                : 'Run PM templates or review your submitted inspections.',
+            canCreateTemplate
+                ? (limit != null
+                    ? 'Run PM templates or create your own (up to $limit per discipline).'
+                    : 'Run PM templates or create checklists for your site.')
+                : 'Run PM templates and submit inspection results for your site.',
             style: TextStyle(
               color: AppColors.textMuted(context),
               fontSize: 15,
@@ -86,7 +90,7 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
             },
           ),
           const SizedBox(height: 10),
-          if (entitlement.allowsPmTemplateCreate)
+          if (canCreateTemplate)
             HeevyListTile(
               icon: Icons.add_circle_outline,
               title: 'New inspection template',
@@ -103,7 +107,7 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
                 );
               },
             ),
-          if (entitlement.allowsPmTemplateCreate) const SizedBox(height: 10),
+          if (canCreateTemplate) const SizedBox(height: 10),
           HeevyListTile(
             icon: Icons.fact_check_outlined,
             title: 'PM templates',

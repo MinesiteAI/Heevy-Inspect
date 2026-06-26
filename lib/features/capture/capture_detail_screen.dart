@@ -160,27 +160,32 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
             sourceId: id,
           ),
           const SizedBox(height: 10),
-          HeevyListTile(
-            icon: Icons.build_outlined,
-            title: 'Create work order',
-            subtitle: 'Turn this capture into a trackable WO',
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CreateWorkOrderScreen(
-                    initialTitle: notes.length > 60
-                        ? '${notes.substring(0, 57)}...'
-                        : (notes.isNotEmpty ? notes : 'Field capture'),
-                    initialDescription: notes,
-                    initialLocation: area,
-                    sourceType: 'field_capture',
-                    sourceId: id,
+          if (UpgradeCtaPolicy.canCreateWorkOrderOnMobile(
+            isOrgManager: widget.entitlement?.isOrgManager == true,
+            allowsPlant: widget.entitlement?.allowsPlant == true,
+          )) ...[
+            HeevyListTile(
+              icon: Icons.build_outlined,
+              title: 'Create work order',
+              subtitle: 'Turn this capture into a trackable WO',
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CreateWorkOrderScreen(
+                      initialTitle: notes.length > 60
+                          ? '${notes.substring(0, 57)}...'
+                          : (notes.isNotEmpty ? notes : 'Field capture'),
+                      initialDescription: notes,
+                      initialLocation: area,
+                      sourceType: 'field_capture',
+                      sourceId: id,
+                    ),
                   ),
-                ),
-              );
-              await InspectAnalytics.track('capture_to_wo');
-            },
-          ),
+                );
+                await InspectAnalytics.track('capture_to_wo');
+              },
+            ),
+          ],
           if (UpgradeCtaPolicy.showCaptureFlowUpgrade(
             isOrgManager: widget.entitlement?.isOrgManager == true,
           )) ...[

@@ -18,4 +18,14 @@ class UpgradeCtaPolicy {
     required int overduePms,
   }) =>
       !allowsPlant && overduePms > 0;
+
+  /// Home-screen Plant CMMS upgrade tile — supervisors only.
+  static bool showHomeUpgradeTile({required bool isOrgManager}) => isOrgManager;
+
+  /// Mobile WO creation — supervisors (or full Plant entitlement).
+  static bool canCreateWorkOrderOnMobile({
+    required bool isOrgManager,
+    required bool allowsPlant,
+  }) =>
+      isOrgManager || allowsPlant;
 }

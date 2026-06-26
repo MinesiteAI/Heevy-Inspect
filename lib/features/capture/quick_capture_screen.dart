@@ -7,13 +7,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../analytics/inspect_analytics.dart';
+import '../../config/field_copy.dart';
+import '../../billing/entitlement_service.dart';
+import '../../billing/upgrade_cta_policy.dart';
 import '../../config/heevy_brand.dart';
 import '../../features/assets/asset_display.dart';
 import '../../features/assets/asset_picker_sheet.dart';
 import '../../sync/offline_queue.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
-import '../work_requests/work_request_detail_screen.dart';
 import 'capture_service.dart';
 
 const _severities = ['P1 – Critical', 'P2 – High', 'P3 – Medium', 'P4 – Low'];
@@ -26,7 +28,9 @@ class _Photo {
 }
 
 class QuickCaptureScreen extends StatefulWidget {
-  const QuickCaptureScreen({super.key});
+  const QuickCaptureScreen({super.key, this.entitlement});
+
+  final EntitlementResult? entitlement;
 
   @override
   State<QuickCaptureScreen> createState() => _QuickCaptureScreenState();
@@ -46,6 +50,15 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String? _error;
 
   CaptureService get _svc => CaptureService(Supabase.instance.client);
+
+  bool get _canCreateWorkOrder {
+    final e = widget.entitlement;
+    if (e == null) return false;
+    return UpgradeCtaPolicy.canCreateWorkOrderOnMobile(
+      isOrgManager: e.isOrgManager,
+      allowsPlant: e.allowsPlant,
+    );
+  }
 
   @override
   void dispose() {
@@ -125,36 +138,15 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       }
       if (!mounted) return;
       final wr = result['wr_number']?.toString();
-      final wrId = result['work_request_id']?.toString();
       final wo = result['work_order_number']?.toString();
-      final baseMsg = wo != null && wo.isNotEmpty
-          ? 'Capture saved ($wr) · WO $wo'
-          : wr != null && wr.isNotEmpty
-          ? 'Draft saved ($wr)'
-          : 'Capture saved';
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '$baseMsg — submit to site queue to notify your supervisor.',
-          ),
-          backgroundColor: AppColors.surface(context),
-          duration: const Duration(seconds: 8),
-          action: wrId != null && wrId.isNotEmpty
-              ? SnackBarAction(
-                  label: 'Submit now',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            WorkRequestDetailScreen(workRequestId: wrId),
-                      ),
-                    );
-                  },
-                )
-              : null,
-        ),
-      );
-      Navigator.of(context).pop(true);
+      final message = result['message']?.toString();
+      final successMsg = message ??
+          (wo != null && wo.isNotEmpty
+              ? 'Capture saved ($wr) · WO $wo'
+              : wr != null && wr.isNotEmpty
+              ? '$wr submitted to your site queue'
+              : 'Capture saved');
+      Navigator.of(context).pop({'message': successMsg});
     } catch (e) {
       if (!mounted) return;
       if (isLikelyOfflineError(e)) {
@@ -225,7 +217,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      appBar: const HeevyBrandedAppBar(title: 'Quick capture'),
+      appBar: const HeevyBrandedAppBar(title: FieldCopy.quickCaptureScreenTitle),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
@@ -380,20 +372,22 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Create work order now',
-              style: TextStyle(color: AppColors.text(context)),
+          if (_canCreateWorkOrder) ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Create work order now',
+                style: TextStyle(color: AppColors.text(context)),
+              ),
+              subtitle: Text(
+                'Also open a basic WO (scheduling requires upgrade)',
+                style: TextStyle(color: AppColors.textFaint(context), fontSize: 12),
+              ),
+              value: _createWorkOrder,
+              onChanged: (v) => setState(() => _createWorkOrder = v),
             ),
-            subtitle: Text(
-              'Also open a basic WO (scheduling requires upgrade)',
-              style: TextStyle(color: AppColors.textFaint(context), fontSize: 12),
-            ),
-            value: _createWorkOrder,
-            onChanged: (v) => setState(() => _createWorkOrder = v),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           HeevyPrimaryButton(
             label: _submitting ? 'Submitting…' : 'Submit capture',
             loading: _submitting,

@@ -11,6 +11,7 @@ import {
   verifyJwt,
   writeAuditLog,
 } from "../_shared/inspect-auth.ts";
+import { notifyOrgManagers } from "../_shared/mobile-notify.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
@@ -56,7 +57,7 @@ Deno.serve(async (req) => {
     const problemDescription = [notes, voiceTranscript].filter(Boolean).join("\n\n");
 
     const { data: wrNumber } = await admin.rpc("next_wr_number");
-    const wrNum = typeof wrNumber === "string" ? wrNumber : `WR-${Date.now()}`;
+    let wrNum = typeof wrNumber === "string" ? wrNumber : `WR-${Date.now()}`;
 
     const { data: wrRow, error: wrErr } = await admin
       .from("work_requests")
@@ -78,6 +79,54 @@ Deno.serve(async (req) => {
       .single();
 
     if (wrErr) return json({ error: wrErr.message }, 500);
+
+    const nextWrStatus = packAllows(pack, "plant") ? "Pending Approval" : "Open";
+    const { data: submittedWr, error: submitErr } = await admin
+      .from("work_requests")
+      .update({
+        status: nextWrStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", wrRow.id)
+      .select("id, wr_number, status")
+      .single();
+
+    if (submitErr) return json({ error: submitErr.message }, 500);
+
+    await writeAuditLog(admin, {
+      userId: auth.userId,
+      actionType: "submit",
+      entityType: "work_request",
+      entityId: wrRow.id,
+      newValue: submittedWr as Record<string, unknown>,
+      metadata: {
+        source: "heevy_inspect_quick_capture",
+        next_status: nextWrStatus,
+      },
+    });
+
+    wrNum = str(submittedWr?.wr_number) || wrNum;
+    const submitter = workspace.fullName ?? auth.email ?? "A crew member";
+    const notifiedCount = await notifyOrgManagers(admin, workspace.organizationId, {
+      excludeUserId: auth.userId,
+      type: "work_request_submitted",
+      title: "New work request submitted",
+      body: `${submitter} submitted ${wrNum}: ${workTitle}`,
+      payloadJson: {
+        work_request_id: wrRow.id,
+        wr_number: wrNum,
+        status: nextWrStatus,
+      },
+      dedupeKey: `wr_submit_${wrRow.id}`,
+    });
+
+    const submitMessage = nextWrStatus === "Open"
+      ? notifiedCount > 0
+        ? `${wrNum} submitted to your site queue. Supervisor notified.`
+        : `${wrNum} submitted to your site queue.`
+      : notifiedCount > 0
+      ? `${wrNum} submitted for approval. Supervisor notified.`
+      : `${wrNum} submitted for approval on web.`;
 
     const { data: captureRow, error: capErr } = await admin
       .from("field_captures")
@@ -160,7 +209,10 @@ Deno.serve(async (req) => {
       ok: true,
       capture_id: captureRow?.id ?? null,
       work_request_id: wrRow?.id ?? null,
-      wr_number: wrRow?.wr_number ?? wrNum,
+      wr_number: wrNum,
+      wr_status: nextWrStatus,
+      submitted: true,
+      message: submitMessage,
       work_order_id: workOrderId,
       work_order_number: workOrderNumber,
       created_at: captureRow?.created_at ?? null,

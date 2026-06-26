@@ -8,6 +8,7 @@ import '../features/notifications/notifications_screen.dart';
 import '../features/work_requests/work_request_service.dart';
 import '../features/work_requests/work_requests_list_screen.dart';
 import '../notifications/notification_service.dart';
+import '../config/field_copy.dart';
 import '../billing/upgrade_cta_policy.dart';
 import '../config/heevy_urls.dart';
 import '../theme/app_colors.dart';
@@ -156,8 +157,7 @@ class SupervisorHomeStrip extends StatelessWidget {
             if (summary.teamDraftWrs > 0)
               _SummaryRow(
                 icon: Icons.assignment_late_outlined,
-                label:
-                    '${summary.teamDraftWrs} crew draft${summary.teamDraftWrs == 1 ? '' : 's'} awaiting submit',
+                label: FieldCopy.crewDraftsAwaiting(summary.teamDraftWrs),
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(

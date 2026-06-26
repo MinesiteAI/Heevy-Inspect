@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/field_copy.dart';
 import '../../billing/entitlement_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
@@ -82,14 +83,26 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenTitle = _scope == 'team' ? 'Team photo log' : 'Photo log';
+
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      appBar: HeevyBrandedAppBar(
-        title: _scope == 'team' ? 'Team capture history' : 'Capture history',
-      ),
+      appBar: HeevyBrandedAppBar(title: screenTitle),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Text(
+              'Evidence from the field. Each quick capture also creates a draft work request.',
+              style: TextStyle(
+                color: AppColors.textFaint(context),
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           if (_showTeamTab)
             TeamScopeTabs(
               scope: _scope,
@@ -129,11 +142,11 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
                         HeevyEmptyState(
                           icon: Icons.camera_alt_outlined,
                           title: _scope == 'team'
-                              ? 'No team captures yet'
-                              : 'No captures yet',
+                              ? 'No team photos yet'
+                              : 'No photos yet',
                           subtitle: _scope == 'team'
-                              ? 'Field captures from your crew appear here.'
-                              : 'Use Quick capture to log your first defect or inspection.',
+                              ? FieldCopy.photoLogEmptyTeam
+                              : FieldCopy.photoLogEmptyField,
                         ),
                       ],
                     );

@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/mobile_function_client.dart';
+
 class CapturePhoto {
   const CapturePhoto({
     required this.bytes,
@@ -19,6 +21,8 @@ class CaptureService {
   CaptureService(this._client);
 
   final SupabaseClient _client;
+
+  MobileFunctionClient get _fn => MobileFunctionClient(_client);
 
   Future<Map<String, dynamic>> submitFieldCapture({
     required String plantArea,
@@ -59,10 +63,7 @@ class CaptureService {
 
     final FunctionResponse res;
     try {
-      res = await _client.functions.invoke(
-        'mobile-submit-field-capture',
-        body: body,
-      );
+      res = await _fn.invoke('mobile-submit-field-capture', body: body);
     } catch (e) {
       throw Exception(_formatInvokeError(e));
     }
@@ -81,7 +82,7 @@ class CaptureService {
   Future<List<Map<String, dynamic>>> listCaptures({
     String scope = 'mine',
   }) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-list-field-captures',
       body: {'scope': scope},
     );
@@ -94,7 +95,7 @@ class CaptureService {
   }
 
   Future<Map<String, dynamic>> listCapturesMeta({String scope = 'mine'}) async {
-    final res = await _client.functions.invoke(
+    final res = await _fn.invoke(
       'mobile-list-field-captures',
       body: {'scope': scope},
     );
