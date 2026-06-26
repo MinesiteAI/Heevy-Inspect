@@ -18,6 +18,7 @@ import '../inspections/inspections_home_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../upgrade/upgrade_screen.dart';
 import '../work_orders/work_orders_list_screen.dart';
+import '../home/shift_summary_screen.dart';
 import '../work_requests/work_requests_list_screen.dart';
 
 class InspectHomeScreen extends StatefulWidget {
@@ -222,6 +223,21 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
                   summary: _supervisorSummary!,
                   onRefresh: _refreshBadges,
                 ),
+              if (entitlement.isOrgManager) ...[
+                const SizedBox(height: 10),
+                HeevyListTile(
+                  icon: Icons.wb_twilight_outlined,
+                  title: 'Last 24 hours',
+                  subtitle: 'Shift handover — crew captures and open requests by area',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ShiftSummaryScreen(entitlement: entitlement),
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'What would you like to do?',
@@ -299,7 +315,7 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const WorkOrdersListScreen(),
+                        builder: (_) => WorkOrdersListScreen(entitlement: entitlement),
                       ),
                     );
                   },

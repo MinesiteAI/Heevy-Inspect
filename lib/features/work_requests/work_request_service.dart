@@ -46,6 +46,17 @@ class WorkRequestService {
     throw Exception('Work request not found');
   }
 
+  Future<Map<String, dynamic>> acknowledgeWorkRequest(String id) async {
+    final res = await _client.functions.invoke(
+      'mobile-acknowledge-work-request',
+      body: {'id': id},
+    );
+    if (res.status >= 400) throw Exception(_error(res));
+    final data = res.data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    throw Exception('Unexpected response');
+  }
+
   Future<Map<String, dynamic>> submitWorkRequest(String id) async {
     final res = await _client.functions.invoke(
       'mobile-submit-work-request',

@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
     const title = str(updated?.work_title) || "Work request";
     const submitter = workspace.fullName ?? auth.email ?? "A crew member";
 
-    await notifyOrgManagers(admin, workspace.organizationId, {
+    const notifiedCount = await notifyOrgManagers(admin, workspace.organizationId, {
       excludeUserId: auth.userId,
       type: "work_request_submitted",
       title: "New work request submitted",
@@ -97,13 +97,35 @@ Deno.serve(async (req) => {
       dedupeKey: `wr_submit_${id}`,
     });
 
+    const managerNames: string[] = [];
+    if (workspace.organizationId) {
+      const { data: managers } = await admin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("organization_id", workspace.organizationId)
+        .eq("is_org_manager", true)
+        .neq("id", auth.userId);
+      for (const mgr of managers ?? []) {
+        const label = str(mgr.full_name) || str(mgr.email);
+        if (label) managerNames.push(label);
+      }
+    }
+
+    const notifyDetail = managerNames.length > 0
+      ? `Notified: ${managerNames.slice(0, 3).join(", ")}${managerNames.length > 3 ? ` +${managerNames.length - 3} more` : ""}.`
+      : notifiedCount > 0
+      ? "Your supervisor has been notified."
+      : "Submitted to your site queue.";
+
     return json({
       ok: true,
       work_request: updated,
       web_queue: true,
+      managers_notified: notifiedCount,
+      manager_names: managerNames,
       message: nextStatus === "Open"
-        ? "Submitted to your site queue. Your supervisor has been notified."
-        : "Submitted for approval. Your supervisor has been notified.",
+        ? `Submitted to your site queue. ${notifyDetail}`
+        : `Submitted for approval. ${notifyDetail}`,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

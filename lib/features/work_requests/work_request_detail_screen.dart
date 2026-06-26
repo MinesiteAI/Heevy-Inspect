@@ -3,20 +3,29 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../analytics/inspect_analytics.dart';
+import '../../billing/entitlement_service.dart';
+import '../../billing/upgrade_cta_policy.dart';
 import '../../config/heevy_urls.dart';
 import '../../data/storage_url_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ask_field_guide_tile.dart';
 import '../../widgets/heevy_ui.dart';
 import '../../widgets/signed_photo_strip.dart';
+import '../../widgets/view_on_web_button.dart';
+import '../../widgets/wr_status_timeline.dart';
 import '../capture/capture_detail_screen.dart';
 import '../work_orders/create_work_order_screen.dart';
 import 'work_request_service.dart';
 
 class WorkRequestDetailScreen extends StatefulWidget {
-  const WorkRequestDetailScreen({super.key, required this.workRequestId});
+  const WorkRequestDetailScreen({
+    super.key,
+    required this.workRequestId,
+    this.entitlement,
+  });
 
   final String workRequestId;
+  final EntitlementResult? entitlement;
 
   @override
   State<WorkRequestDetailScreen> createState() => _WorkRequestDetailScreenState();
@@ -26,8 +35,12 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
   late Future<Map<String, dynamic>> _future;
   late Future<List<String>> _photosFuture;
   bool _submitting = false;
+  bool _acknowledging = false;
 
   WorkRequestService get _svc => WorkRequestService(Supabase.instance.client);
+
+  bool get _isOrgManager => widget.entitlement?.isOrgManager == true;
+  bool get _allowsPlant => widget.entitlement?.allowsPlant ?? true;
 
   @override
   void initState() {
@@ -54,10 +67,13 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
       if (!mounted) return;
       final msg = result['message']?.toString() ??
           'Submitted to your site queue.';
-      messenger.showSnackBar(SnackBar(content: Text(msg)));
-      setState(() {
-        _load();
-      });
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      setState(_load);
       await InspectAnalytics.track('wr_submit');
     } catch (e) {
       if (!mounted) return;
@@ -69,6 +85,33 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
       );
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _acknowledge() async {
+    setState(() => _acknowledging = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await _svc.acknowledgeWorkRequest(widget.workRequestId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result['message']?.toString() ?? 'Acknowledged for crew.',
+          ),
+        ),
+      );
+      setState(_load);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: const Color(0xFFFF453A),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _acknowledging = false);
     }
   }
 
@@ -118,6 +161,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
           );
           final capture = payload['field_capture'] as Map?;
           final linkedWo = payload['linked_work_order'] as Map?;
+          final supervisorAck = payload['supervisor_ack'] as Map?;
           final readOnly = payload['read_only'] == true;
 
           final title = wr['work_title']?.toString() ?? 'Work request';
@@ -128,6 +172,15 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
           final description = wr['problem_description']?.toString() ?? '';
           final creator = wr['created_by_name']?.toString() ?? '';
           final isDraft = status.toLowerCase() == 'draft';
+          final hasAck = supervisorAck != null;
+
+          final timelineSteps = buildWrTimelineSteps(
+            wr: wr,
+            linkedWo: linkedWo != null ? Map<String, dynamic>.from(linkedWo) : null,
+            supervisorAck: supervisorAck != null
+                ? Map<String, dynamic>.from(supervisorAck)
+                : null,
+          );
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -162,6 +215,8 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                 [status, priority, location].where((s) => s.isNotEmpty).join(' · '),
                 style: TextStyle(color: AppColors.textFaint(context)),
               ),
+              const SizedBox(height: 14),
+              WrStatusTimeline(steps: timelineSteps),
               if (_statusMessage(status, readOnly: readOnly).isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -186,13 +241,6 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
               ],
               const SizedBox(height: 20),
               SignedPhotoStrip(urlsFuture: _photosFuture),
-              if (linkedWo != null) ...[
-                const SizedBox(height: 20),
-                Text(
-                  'Linked work order: ${linkedWo['work_order_number'] ?? linkedWo['title'] ?? ''}',
-                  style: TextStyle(color: AppColors.textMuted(context)),
-                ),
-              ],
               if (isDraft && !readOnly) ...[
                 const SizedBox(height: 24),
                 HeevyPrimaryButton(
@@ -210,6 +258,33 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                   ),
                 ),
               ],
+              if (readOnly && !isDraft && !hasAck) ...[
+                const SizedBox(height: 24),
+                HeevyPrimaryButton(
+                  label: _acknowledging ? 'Acknowledging…' : 'Acknowledge for crew',
+                  loading: _acknowledging,
+                  onTap: _acknowledging ? null : _acknowledge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Lets the crew know you have seen this — approve and schedule on web.',
+                  style: TextStyle(
+                    color: AppColors.textFaint(context),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if (!isDraft) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ViewOnWebButton(
+                    uri: HeevyUrls.workRequestOnWeb(widget.workRequestId),
+                    label: 'View on web',
+                  ),
+                ),
+              ],
               const SizedBox(height: 28),
               if (capture != null)
                 HeevyListTile(
@@ -221,6 +296,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                       MaterialPageRoute(
                         builder: (_) => CaptureDetailScreen(
                           capture: Map<String, dynamic>.from(capture),
+                          entitlement: widget.entitlement,
                         ),
                       ),
                     );
@@ -254,16 +330,11 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                 sourceType: 'work_request',
                 sourceId: widget.workRequestId,
               ),
-              if (!isDraft) ...[
-                const SizedBox(height: 16),
-                HeevySecondaryButton(
-                  label: 'Open on web',
-                  onTap: () => launchUrl(
-                    HeevyUrls.workRequestOnWeb(widget.workRequestId),
-                  ),
-                ),
-              ],
-              if (!readOnly && !isDraft) ...[
+              if (UpgradeCtaPolicy.showPlantFeatureLocks(
+                allowsPlant: _allowsPlant,
+                isOrgManager: _isOrgManager,
+              ) &&
+                  !isDraft) ...[
                 const SizedBox(height: 16),
                 Text(
                   'Plant CMMS features',

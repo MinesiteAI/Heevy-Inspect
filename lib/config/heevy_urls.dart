@@ -19,6 +19,10 @@ abstract final class HeevyUrls {
   static Uri workRequestOnWeb(String workRequestId) =>
       Uri.parse('$appBase/plant/work-requests?id=$workRequestId');
 
+  static Uri plantSchedule() => Uri.parse('$appBase/schedule');
+
+  static Uri orgTeamSettings() => Uri.parse('$appBase/settings/team');
+
   /// Minesite companion app — web landing until a dedicated App Store ID is set.
   static Uri minesiteMobileApp() => Uri.parse('$appBase/mobile');
 

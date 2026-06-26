@@ -14,6 +14,39 @@ function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 }
 
+async function loadSupervisorAck(
+  admin: ReturnType<typeof serviceClient>,
+  workRequestId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data: ackLog } = await admin
+    .from("audit_logs")
+    .select("created_at, user_id, metadata")
+    .eq("entity_type", "work_request")
+    .eq("entity_id", workRequestId)
+    .eq("action_type", "supervisor_acknowledge")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!ackLog) return null;
+
+  let ackName = str((ackLog.metadata as Record<string, unknown> | null)?.acknowledged_by_name);
+  if (!ackName && ackLog.user_id) {
+    const { data: ackProfile } = await admin
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", ackLog.user_id)
+      .maybeSingle();
+    ackName = str(ackProfile?.full_name) || str(ackProfile?.email) || "Supervisor";
+  }
+
+  return {
+    acknowledged_at: ackLog.created_at,
+    acknowledged_by: ackLog.user_id,
+    acknowledged_by_name: ackName,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
@@ -75,12 +108,15 @@ Deno.serve(async (req) => {
       createdByName = str(profile?.full_name) || str(profile?.email) || null;
     }
 
+    const supervisorAck = await loadSupervisorAck(admin, id);
+
     return json({
       ok: true,
       work_request: { ...wr, created_by_name: createdByName },
       field_capture: capture,
       linked_work_order: linkedWo,
       read_only: workspace.isOrgManager && createdBy !== auth.userId,
+      supervisor_ack: supervisorAck,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

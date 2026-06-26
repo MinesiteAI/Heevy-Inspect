@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../billing/entitlement_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import 'create_work_order_screen.dart';
@@ -8,7 +9,9 @@ import 'work_order_detail_screen.dart';
 import 'work_order_service.dart';
 
 class WorkOrdersListScreen extends StatefulWidget {
-  const WorkOrdersListScreen({super.key});
+  const WorkOrdersListScreen({super.key, this.entitlement});
+
+  final EntitlementResult? entitlement;
 
   @override
   State<WorkOrdersListScreen> createState() => _WorkOrdersListScreenState();
@@ -120,7 +123,7 @@ class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
                     if (id == null) return;
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => WorkOrderDetailScreen(workOrderId: id),
+                        builder: (_) => WorkOrderDetailScreen(workOrderId: id, entitlement: widget.entitlement),
                       ),
                     );
                   },

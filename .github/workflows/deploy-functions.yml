@@ -57,6 +57,8 @@ jobs:
             mobile-create-pm-template
             mobile-field-chat
             mobile-sign-storage-urls
+            mobile-acknowledge-work-request
+            mobile-org-stats
           )
           for fn in "${FUNCTIONS[@]}"; do
             echo "Deploying $fn..."

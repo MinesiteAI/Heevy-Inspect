@@ -6,14 +6,17 @@ import '../../config/heevy_urls.dart';
 import '../../data/storage_url_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ask_field_guide_tile.dart';
+import '../../billing/entitlement_service.dart';
+import '../../billing/upgrade_cta_policy.dart';
 import '../../widgets/heevy_ui.dart';
 import '../../widgets/signed_photo_strip.dart';
 import 'work_order_service.dart';
 
 class WorkOrderDetailScreen extends StatefulWidget {
-  const WorkOrderDetailScreen({super.key, required this.workOrderId});
+  const WorkOrderDetailScreen({super.key, required this.workOrderId, this.entitlement});
 
   final String workOrderId;
+  final EntitlementResult? entitlement;
 
   @override
   State<WorkOrderDetailScreen> createState() => _WorkOrderDetailScreenState();
@@ -113,30 +116,35 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                 sourceType: 'work_order',
                 sourceId: widget.workOrderId,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Plant CMMS features',
-                style: TextStyle(
-                  color: AppColors.text(context),
-                  fontWeight: FontWeight.w600,
+              if (UpgradeCtaPolicy.showPlantFeatureLocks(
+                allowsPlant: widget.entitlement?.allowsPlant ?? true,
+                isOrgManager: widget.entitlement?.isOrgManager == true,
+              )) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Plant CMMS features',
+                  style: TextStyle(
+                    color: AppColors.text(context),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              _LockedAction(
-                icon: Icons.calendar_month_outlined,
-                label: 'Schedule',
-                onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
-              ),
-              _LockedAction(
-                icon: Icons.groups_outlined,
-                label: 'Assign crew',
-                onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
-              ),
-              _LockedAction(
-                icon: Icons.inventory_2_outlined,
-                label: 'Parts & stores',
-                onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
-              ),
+                const SizedBox(height: 8),
+                _LockedAction(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Schedule',
+                  onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
+                ),
+                _LockedAction(
+                  icon: Icons.groups_outlined,
+                  label: 'Assign crew',
+                  onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
+                ),
+                _LockedAction(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Parts & stores',
+                  onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
+                ),
+              ],
             ],
           );
         },

@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/heevy_brand.dart';
 import '../../config/heevy_urls.dart';
+import '../../data/org_stats_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_brand_title.dart';
 import '../../widgets/heevy_ui.dart';
 
-class UpgradeScreen extends StatelessWidget {
+class UpgradeScreen extends StatefulWidget {
   const UpgradeScreen({super.key});
+
+  @override
+  State<UpgradeScreen> createState() => _UpgradeScreenState();
+}
+
+class _UpgradeScreenState extends State<UpgradeScreen> {
+  late Future<OrgStats> _statsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _statsFuture = OrgStatsService(Supabase.instance.client).load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +61,35 @@ class UpgradeScreen extends StatelessWidget {
                     height: 1.45,
                   ),
                 ),
+                const SizedBox(height: 16),
+                FutureBuilder<OrgStats>(
+                  future: _statsFuture,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const SizedBox.shrink();
+                    final stats = snapshot.data!;
+                    if (stats.fieldCaptureCount == 0 && stats.workRequestCount == 0) {
+                      return Text(
+                        'Start logging in the field — your data will be ready when you upgrade.',
+                        style: TextStyle(
+                          color: AppColors.textFaint(context),
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      );
+                    }
+                    return Text(
+                      'You already have ${stats.fieldCaptureCount} field capture${stats.fieldCaptureCount == 1 ? '' : 's'} '
+                      'and ${stats.workRequestCount} work request${stats.workRequestCount == 1 ? '' : 's'} on this site — '
+                      'all carry over when you upgrade.',
+                      style: TextStyle(
+                        color: AppColors.textMuted(context),
+                        fontSize: 14,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -59,19 +103,19 @@ class UpgradeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _FeatureRow(
+          const _FeatureRow(
             icon: Icons.assignment_outlined,
             title: 'Work orders & scheduling',
             subtitle: 'Turn captures into tracked maintenance jobs.',
           ),
           const SizedBox(height: 10),
-          _FeatureRow(
+          const _FeatureRow(
             icon: Icons.inventory_2_outlined,
             title: 'Stores & parts',
             subtitle: 'Manage spares and procurement on site.',
           ),
           const SizedBox(height: 10),
-          _FeatureRow(
+          const _FeatureRow(
             icon: Icons.analytics_outlined,
             title: 'Reporting & analytics',
             subtitle: 'Reliability metrics across your plant.',

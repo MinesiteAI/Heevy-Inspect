@@ -7,14 +7,18 @@ import '../../config/heevy_urls.dart';
 import '../../data/storage_url_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/ask_field_guide_tile.dart';
+import '../../billing/entitlement_service.dart';
+import '../../billing/upgrade_cta_policy.dart';
 import '../../widgets/heevy_ui.dart';
 import '../../widgets/signed_photo_strip.dart';
 import '../work_orders/create_work_order_screen.dart';
+import '../work_requests/work_request_detail_screen.dart';
 
 class CaptureDetailScreen extends StatefulWidget {
-  const CaptureDetailScreen({super.key, required this.capture});
+  const CaptureDetailScreen({super.key, required this.capture, this.entitlement});
 
   final Map<String, dynamic> capture;
+  final EntitlementResult? entitlement;
 
   @override
   State<CaptureDetailScreen> createState() => _CaptureDetailScreenState();
@@ -56,6 +60,7 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
     final voice = widget.capture['voice_transcript']?.toString() ?? '';
     final created = widget.capture['created_at']?.toString() ?? '';
     final id = widget.capture['id']?.toString() ?? '';
+    final wrId = widget.capture['work_request_id']?.toString().trim();
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -128,6 +133,27 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
           const SizedBox(height: 20),
           SignedPhotoStrip(urlsFuture: _photosFuture),
           const SizedBox(height: 28),
+          if (wrId != null && wrId.isNotEmpty) ...[
+            HeevyListTile(
+              icon: Icons.assignment_outlined,
+              title: 'Open work request',
+              subtitle: _wrNumber != null && _wrNumber!.isNotEmpty
+                  ? '$_wrNumber — submit, status, and approval'
+                  : 'Submit, status, and approval',
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        WorkRequestDetailScreen(
+                          workRequestId: wrId,
+                          entitlement: widget.entitlement,
+                        ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
           AskFieldGuideTile(
             subtitle: 'Get help about this capture',
             sourceType: 'field_capture',
@@ -155,11 +181,15 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
               await InspectAnalytics.track('capture_to_wo');
             },
           ),
-          const SizedBox(height: 10),
-          HeevySecondaryButton(
-            label: 'Upgrade for scheduling',
-            onTap: () => launchUrl(HeevyUrls.captureUpgrade()),
-          ),
+          if (UpgradeCtaPolicy.showCaptureFlowUpgrade(
+            isOrgManager: widget.entitlement?.isOrgManager == true,
+          )) ...[
+            const SizedBox(height: 10),
+            HeevySecondaryButton(
+              label: 'Upgrade for scheduling',
+              onTap: () => launchUrl(HeevyUrls.captureUpgrade()),
+            ),
+          ],
         ],
       ),
     );

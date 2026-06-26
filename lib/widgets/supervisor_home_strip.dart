@@ -8,7 +8,10 @@ import '../features/notifications/notifications_screen.dart';
 import '../features/work_requests/work_request_service.dart';
 import '../features/work_requests/work_requests_list_screen.dart';
 import '../notifications/notification_service.dart';
+import '../billing/upgrade_cta_policy.dart';
+import '../config/heevy_urls.dart';
 import '../theme/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Summary counts for org managers on the home screen.
 class SupervisorSummary {
@@ -115,7 +118,7 @@ class SupervisorHomeStrip extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            if (summary.overduePms > 0)
+            if (summary.overduePms > 0) ...[
               _SummaryRow(
                 icon: Icons.event_busy_outlined,
                 label:
@@ -129,6 +132,27 @@ class SupervisorHomeStrip extends StatelessWidget {
                   onRefresh?.call();
                 },
               ),
+              _SummaryRow(
+                icon: Icons.open_in_new,
+                label: 'View schedule on web',
+                onTap: () => launchUrl(
+                  HeevyUrls.plantSchedule(),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              if (UpgradeCtaPolicy.showSupervisorSchedulingUpgrade(
+                allowsPlant: entitlement.allowsPlant,
+                overduePms: summary.overduePms,
+              ))
+                _SummaryRow(
+                  icon: Icons.rocket_launch_outlined,
+                  label: 'Unlock PM scheduling on Plant CMMS',
+                  onTap: () => launchUrl(
+                    HeevyUrls.captureUpgrade(),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+            ],
             if (summary.teamDraftWrs > 0)
               _SummaryRow(
                 icon: Icons.assignment_late_outlined,

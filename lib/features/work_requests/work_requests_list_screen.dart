@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../billing/entitlement_service.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
+import '../../widgets/history_card.dart';
+import '../../widgets/solo_submitter_banner.dart';
 import '../../widgets/team_scope_tabs.dart';
 import '../capture/quick_capture_screen.dart';
 import 'create_work_request_screen.dart';
@@ -30,6 +32,7 @@ class WorkRequestsListScreen extends StatefulWidget {
 
 class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
   late Future<Map<String, dynamic>> _future;
+  Future<List<Map<String, dynamic>>>? _teamItemsFuture;
   late String _scope;
   TeamWrFilter _teamFilter = TeamWrFilter.submitted;
   String? _priorityFilter;
@@ -41,6 +44,10 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
     super.initState();
     _scope = widget.initialScope ?? 'mine';
     _teamFilter = widget.initialTeamFilter ?? TeamWrFilter.submitted;
+    if (_showTeamTab) {
+      _teamItemsFuture = WorkRequestService(Supabase.instance.client)
+          .listWorkRequests(scope: 'team');
+    }
     _reload();
   }
 
@@ -52,8 +59,16 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
   Future<void> _refresh() async {
     final f = WorkRequestService(Supabase.instance.client)
         .listWorkRequestsMeta(scope: _scope);
-    setState(() => _future = f);
+    final teamF = _showTeamTab
+        ? WorkRequestService(Supabase.instance.client)
+            .listWorkRequests(scope: 'team')
+        : null;
+    setState(() {
+      _future = f;
+      if (teamF != null) _teamItemsFuture = teamF;
+    });
     await f;
+    if (teamF != null) await teamF;
   }
 
   void _setScope(String scope) {
@@ -118,6 +133,23 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
     if (s == 'open') return 'Open';
     if (s == 'pending approval') return 'Pending approval';
     return status ?? '';
+  }
+
+  Widget _soloBanner() {
+    if (!_showTeamTab || _teamItemsFuture == null) {
+      return const SizedBox.shrink();
+    }
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _teamItemsFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        if (!isSoloSubmitterOnSite(snapshot.data!, uid)) {
+          return const SizedBox.shrink();
+        }
+        return const SoloSubmitterBanner();
+      },
+    );
   }
 
   Widget _teamFilterBar() {
@@ -187,6 +219,7 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
               onScopeChanged: _setScope,
               teamLabel: 'Site team',
             ),
+          _soloBanner(),
           if (_scope == 'team') _teamFilterBar(),
           Expanded(
             child: RefreshIndicator(
@@ -275,25 +308,39 @@ class _WorkRequestsListScreenState extends State<WorkRequestsListScreen> {
                       final status = _statusLabel(row['status']?.toString());
                       final location =
                           row['functional_location']?.toString() ?? '';
+                      final priority = row['priority']?.toString() ?? '';
                       final creator =
                           row['created_by_name']?.toString() ?? '';
-                      final subtitle = [
-                        if (num.isNotEmpty) num,
-                        status,
-                        if (_scope == 'team' && creator.isNotEmpty) creator,
-                        location,
-                      ].where((s) => s.isNotEmpty).join(' · ');
-                      return HeevyListTile(
+                      final created = row['created_at']?.toString() ?? '';
+                      final lines = <HistoryCardLine>[
+                        if (status.isNotEmpty) HistoryCardLine(status),
+                        if (num.isNotEmpty)
+                          HistoryCardLine(num, style: HistoryCardLineStyle.faint),
+                        if (priority.isNotEmpty) HistoryCardLine(priority),
+                        if (location.isNotEmpty)
+                          HistoryCardLine(location, style: HistoryCardLineStyle.faint),
+                        if (_scope == 'team' && creator.isNotEmpty)
+                          HistoryCardLine(creator, style: HistoryCardLineStyle.faint),
+                        if (created.isNotEmpty)
+                          HistoryCardLine(
+                            formatHistoryDate(created),
+                            style: HistoryCardLineStyle.date,
+                          ),
+                      ];
+                      return HistoryCard(
                         icon: Icons.assignment_outlined,
                         title: title,
-                        subtitle: subtitle,
+                        lines: lines,
                         onTap: () {
                           final id = row['id']?.toString();
                           if (id == null) return;
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) =>
-                                  WorkRequestDetailScreen(workRequestId: id),
+                                  WorkRequestDetailScreen(
+                                  workRequestId: id,
+                                  entitlement: widget.entitlement,
+                                ),
                             ),
                           );
                         },
