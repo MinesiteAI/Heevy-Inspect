@@ -6,12 +6,13 @@ import '../../data/pm/pm_schedule_templates_api.dart';
 import '../../data/workspace_context.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
+import 'create_pm_template_screen.dart';
 import 'schedule_pm_form_screen.dart';
 
 class PmTemplatesListScreen extends StatefulWidget {
-  const PmTemplatesListScreen({super.key, this.entitlement});
+  const PmTemplatesListScreen({super.key, required this.entitlement});
 
-  final EntitlementResult? entitlement;
+  final EntitlementResult entitlement;
 
   @override
   State<PmTemplatesListScreen> createState() => _PmTemplatesListScreenState();
@@ -29,11 +30,37 @@ class _PmTemplatesListScreenState extends State<PmTemplatesListScreen> {
     _workspaceFuture = fetchWorkspaceContext(client);
   }
 
+  Future<void> _openCreate() async {
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CreatePmTemplateScreen(entitlement: widget.entitlement),
+      ),
+    );
+    if (created == true && mounted) {
+      setState(() {
+        _templatesFuture = fetchPMScheduleTemplates(Supabase.instance.client);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final entitlement = widget.entitlement;
+    final canCreate = entitlement.allowsPmTemplateCreate;
+
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      appBar: const HeevyBrandedAppBar(title: 'PM inspections'),
+      appBar: HeevyBrandedAppBar(
+        title: 'PM templates',
+        actions: [
+          if (canCreate)
+            IconButton(
+              tooltip: 'New inspection template',
+              onPressed: _openCreate,
+              icon: Icon(Icons.add, color: AppColors.textMuted(context)),
+            ),
+        ],
+      ),
       body: FutureBuilder(
         future: Future.wait([_templatesFuture, _workspaceFuture]),
         builder: (context, snapshot) {
@@ -53,13 +80,37 @@ class _PmTemplatesListScreenState extends State<PmTemplatesListScreen> {
           final siteLabel = workspace.siteDisplayName;
 
           if (items.isEmpty) {
-            final limit = widget.entitlement?.pmTemplateLimitPerDiscipline;
-            return HeevyEmptyState(
-              icon: Icons.fact_check_outlined,
-              title: 'No PM templates yet',
-              subtitle: limit != null
-                  ? 'Create your first template (up to $limit per discipline) or wait for site provisioning on the web.'
-                  : 'Templates appear here once your company site is provisioned on the web.',
+            final limit = entitlement.pmTemplateLimitPerDiscipline;
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              children: [
+                const SizedBox(height: 40),
+                HeevyEmptyState(
+                  icon: Icons.fact_check_outlined,
+                  title: 'No PM templates yet',
+                  subtitle: limit != null
+                      ? 'Create your first checklist — up to $limit templates per discipline on the free tier.'
+                      : 'Create a checklist or wait for site provisioning on the web.',
+                ),
+                if (canCreate) ...[
+                  const SizedBox(height: 24),
+                  HeevyPrimaryButton(
+                    label: 'New inspection template',
+                    onTap: _openCreate,
+                  ),
+                  if (limit != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Free tier: $limit templates per discipline',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textFaint(context),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ],
+              ],
             );
           }
           return ListView.separated(

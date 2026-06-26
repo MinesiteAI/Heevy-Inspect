@@ -6,8 +6,9 @@ import '../../analytics/inspect_analytics.dart';
 import '../../config/heevy_urls.dart';
 import '../../data/storage_url_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/ask_field_guide_tile.dart';
 import '../../widgets/heevy_ui.dart';
-import '../chat/field_guide_screen.dart';
+import '../../widgets/signed_photo_strip.dart';
 import '../work_orders/create_work_order_screen.dart';
 
 class CaptureDetailScreen extends StatefulWidget {
@@ -125,52 +126,12 @@ class _CaptureDetailScreenState extends State<CaptureDetailScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          FutureBuilder<List<String>>(
-            future: _photosFuture,
-            builder: (context, snapshot) {
-              final urls = snapshot.data ?? [];
-              if (urls.isEmpty) return const SizedBox.shrink();
-              return SizedBox(
-                height: 120,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: urls.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      urls[i],
-                      width: 120,
-                      height: 120,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 120,
-                        height: 120,
-                        color: AppColors.surfaceAlt(context),
-                        child: Icon(Icons.broken_image_outlined,
-                            color: AppColors.textMuted(context)),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+          SignedPhotoStrip(urlsFuture: _photosFuture),
           const SizedBox(height: 28),
-          HeevyListTile(
-            icon: Icons.chat_bubble_outline,
-            title: 'Ask Field guide',
+          AskFieldGuideTile(
             subtitle: 'Get help about this capture',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => FieldGuideScreen(
-                    sourceType: 'field_capture',
-                    sourceId: id,
-                  ),
-                ),
-              );
-            },
+            sourceType: 'field_capture',
+            sourceId: id,
           ),
           const SizedBox(height: 10),
           HeevyListTile(

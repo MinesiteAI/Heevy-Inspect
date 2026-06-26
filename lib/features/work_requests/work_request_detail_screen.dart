@@ -6,9 +6,10 @@ import '../../analytics/inspect_analytics.dart';
 import '../../config/heevy_urls.dart';
 import '../../data/storage_url_service.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/ask_field_guide_tile.dart';
 import '../../widgets/heevy_ui.dart';
+import '../../widgets/signed_photo_strip.dart';
 import '../capture/capture_detail_screen.dart';
-import '../chat/field_guide_screen.dart';
 import '../work_orders/create_work_order_screen.dart';
 import 'work_request_service.dart';
 
@@ -140,25 +141,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                 ),
               ],
               const SizedBox(height: 20),
-              FutureBuilder<List<String>>(
-                future: _photosFuture,
-                builder: (context, photoSnap) {
-                  final urls = photoSnap.data ?? [];
-                  if (urls.isEmpty) return const SizedBox.shrink();
-                  return SizedBox(
-                    height: 120,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: urls.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
-                      itemBuilder: (_, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(urls[i], width: 120, height: 120, fit: BoxFit.cover),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              SignedPhotoStrip(urlsFuture: _photosFuture),
               if (linkedWo != null) ...[
                 const SizedBox(height: 20),
                 Text(
@@ -203,20 +186,10 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                 },
               ),
               const SizedBox(height: 10),
-              HeevyListTile(
-                icon: Icons.chat_bubble_outline,
-                title: 'Ask Field guide',
+              AskFieldGuideTile(
                 subtitle: 'Questions about this request',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => FieldGuideScreen(
-                        sourceType: 'work_request',
-                        sourceId: widget.workRequestId,
-                      ),
-                    ),
-                  );
-                },
+                sourceType: 'work_request',
+                sourceId: widget.workRequestId,
               ),
               const SizedBox(height: 16),
               Text(

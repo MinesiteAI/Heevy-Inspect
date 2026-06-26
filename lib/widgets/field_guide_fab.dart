@@ -17,8 +17,9 @@ class FieldGuideFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FloatingActionButton(
-      tooltip: 'Field guide',
+    return FloatingActionButton.extended(
+      tooltip: 'Ask Field Guide',
+      heroTag: 'field_guide_fab',
       onPressed: () async {
         await InspectAnalytics.track('field_guide_fab_open');
         if (!context.mounted) return;
@@ -32,7 +33,14 @@ class FieldGuideFab extends StatelessWidget {
         );
       },
       backgroundColor: AppColors.text(context),
-      child: Icon(Icons.smart_toy_outlined, color: AppColors.bg(context)),
+      icon: Icon(Icons.psychology_outlined, color: AppColors.bg(context)),
+      label: Text(
+        'Ask Field Guide',
+        style: TextStyle(
+          color: AppColors.bg(context),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
