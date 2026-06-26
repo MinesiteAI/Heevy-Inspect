@@ -9,6 +9,7 @@ import {
   str,
   verifyJwt,
 } from "../_shared/inspect-auth.ts";
+import { fetchAccessibleWorkOrder } from "../_shared/mobile-work-order-scope.ts";
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -34,19 +35,12 @@ Deno.serve(async (req) => {
       return json({ error: "Work orders not enabled" }, 403);
     }
 
-    let query = admin
-      .from("work_orders")
-      .select("*")
-      .eq("id", id);
-
-    if (workspace.mineSiteId) {
-      query = query.eq("mine_site_id", workspace.mineSiteId);
-    } else {
-      query = query.eq("created_by", auth.userId);
-    }
-
-    const { data, error } = await query.maybeSingle();
-    if (error) return json({ error: error.message }, 500);
+    const data = await fetchAccessibleWorkOrder(
+      admin,
+      id,
+      workspace,
+      auth.userId,
+    );
     if (!data) return json({ error: "Not found" }, 404);
 
     return json({ ok: true, work_order: data });

@@ -19,6 +19,9 @@ abstract final class HeevyUrls {
   static Uri workRequestOnWeb(String workRequestId) =>
       Uri.parse('$appBase/plant/work-requests?id=$workRequestId');
 
+  static Uri workOrderOnWeb(String workOrderId) =>
+      Uri.parse('$appBase/work-orders/$workOrderId');
+
   static Uri plantSchedule() => Uri.parse('$appBase/schedule');
 
   static Uri orgTeamSettings() => Uri.parse('$appBase/settings/team');

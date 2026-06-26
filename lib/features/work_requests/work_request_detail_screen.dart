@@ -15,6 +15,8 @@ import '../../widgets/view_on_web_button.dart';
 import '../../widgets/wr_status_timeline.dart';
 import '../capture/capture_detail_screen.dart';
 import '../work_orders/create_work_order_screen.dart';
+import '../work_orders/work_order_detail_screen.dart';
+import '../work_orders/work_order_service.dart';
 import 'work_request_service.dart';
 
 class WorkRequestDetailScreen extends StatefulWidget {
@@ -173,6 +175,11 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
           final creator = wr['created_by_name']?.toString() ?? '';
           final isDraft = status.toLowerCase() == 'draft';
           final hasAck = supervisorAck != null;
+          final linkedWoId = linkedWo?['id']?.toString();
+          final linkedWoNum = linkedWo?['work_order_number']?.toString() ?? '';
+          final hasLinkedWo = linkedWoId != null && linkedWoId.isNotEmpty;
+          final linkedWoAccessible =
+              payload['linked_work_order_accessible'] == true;
 
           final timelineSteps = buildWrTimelineSteps(
             wr: wr,
@@ -302,7 +309,54 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                     );
                   },
                 ),
-              if (!readOnly) ...[
+              if (hasLinkedWo && linkedWoAccessible) ...[
+                const SizedBox(height: 10),
+                HeevyListTile(
+                  icon: Icons.build_outlined,
+                  title: linkedWoNum.isNotEmpty
+                      ? 'Open work order $linkedWoNum'
+                      : 'Open work order',
+                  subtitle: linkedWo?['status']?.toString() ?? 'View WO details',
+                  onTap: () async {
+                    try {
+                      await WorkOrderService(Supabase.instance.client)
+                          .getWorkOrder(linkedWoId);
+                      if (!context.mounted) return;
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => WorkOrderDetailScreen(
+                            workOrderId: linkedWoId,
+                            entitlement: widget.entitlement,
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            e.toString().replaceFirst('Exception: ', ''),
+                          ),
+                          backgroundColor: const Color(0xFFFF453A),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ] else if (hasLinkedWo) ...[
+                const SizedBox(height: 10),
+                HeevyListTile(
+                  icon: Icons.open_in_new,
+                  title: linkedWoNum.isNotEmpty
+                      ? 'View work order $linkedWoNum on web'
+                      : 'View work order on web',
+                  subtitle: 'Created on web — open in Plant CMMS',
+                  onTap: () => launchUrl(
+                    HeevyUrls.workOrderOnWeb(linkedWoId),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ] else if (!readOnly) ...[
                 const SizedBox(height: 10),
                 HeevyListTile(
                   icon: Icons.build_outlined,
@@ -321,6 +375,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                       ),
                     );
                     await InspectAnalytics.track('wr_to_wo');
+                    if (mounted) setState(_load);
                   },
                 ),
               ],

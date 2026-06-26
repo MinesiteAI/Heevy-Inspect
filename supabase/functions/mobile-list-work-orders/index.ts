@@ -8,6 +8,7 @@ import {
   serviceClient,
   verifyJwt,
 } from "../_shared/inspect-auth.ts";
+import { listAccessibleWorkOrders } from "../_shared/mobile-work-order-scope.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
@@ -27,24 +28,9 @@ Deno.serve(async (req) => {
       return json({ error: "Work orders not enabled" }, 403);
     }
 
-    let query = admin
-      .from("work_orders")
-      .select(
-        "id, work_order_number, title, description, status, priority, location, asset_name, source_type, source_id, photo_urls, created_at, updated_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const items = await listAccessibleWorkOrders(admin, workspace, auth.userId);
 
-    if (workspace.mineSiteId) {
-      query = query.eq("mine_site_id", workspace.mineSiteId);
-    } else {
-      query = query.eq("created_by", auth.userId);
-    }
-
-    const { data, error } = await query;
-    if (error) return json({ error: error.message }, 500);
-
-    return json({ ok: true, items: data ?? [] });
+    return json({ ok: true, items });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

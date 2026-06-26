@@ -10,6 +10,8 @@ import {
   verifyJwt,
 } from "../_shared/inspect-auth.ts";
 
+import { isWorkOrderAccessible } from "../_shared/mobile-work-order-scope.ts";
+
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 }
@@ -88,6 +90,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     let linkedWo: Record<string, unknown> | null = null;
+    let linkedWoAccessible = false;
     const woId = wr.linked_wo_id as string | null;
     if (woId) {
       const { data: wo } = await admin
@@ -96,6 +99,14 @@ Deno.serve(async (req) => {
         .eq("id", woId)
         .maybeSingle();
       linkedWo = wo as Record<string, unknown> | null;
+      if (linkedWo) {
+        linkedWoAccessible = await isWorkOrderAccessible(
+          admin,
+          woId,
+          workspace,
+          auth.userId,
+        );
+      }
     }
 
     let createdByName: string | null = null;
@@ -115,6 +126,7 @@ Deno.serve(async (req) => {
       work_request: { ...wr, created_by_name: createdByName },
       field_capture: capture,
       linked_work_order: linkedWo,
+      linked_work_order_accessible: linkedWoAccessible,
       read_only: workspace.isOrgManager && createdBy !== auth.userId,
       supervisor_ack: supervisorAck,
     });
