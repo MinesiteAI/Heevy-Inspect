@@ -59,7 +59,7 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg(context),
       appBar: HeevyBrandedAppBar(
-        title: _scope == 'team' ? 'Team captures' : 'My captures',
+        title: _scope == 'team' ? 'Team capture history' : 'Capture history',
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

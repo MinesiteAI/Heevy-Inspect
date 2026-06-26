@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../analytics/inspect_analytics.dart';
+import '../../features/assets/asset_display.dart';
 import '../../features/assets/asset_picker_sheet.dart';
 import '../../features/capture/capture_service.dart';
 import '../../theme/app_colors.dart';
@@ -49,6 +50,7 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
   final _photos = <_Photo>[];
   String? _assetId;
   String? _assetTag;
+  String? _assetDisplayLabel;
   String _priority = _priorities[2];
   bool _submitting = false;
   String? _error;
@@ -62,6 +64,9 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
     _description.text = widget.initialDescription ?? '';
     _location.text = widget.initialLocation ?? '';
     _assetTag = widget.initialAssetTag;
+    if (_assetTag != null && _assetTag!.trim().isNotEmpty) {
+      _assetDisplayLabel = _assetTag!.trim();
+    }
     if (widget.initialPriority != null &&
         _priorities.contains(widget.initialPriority)) {
       _priority = widget.initialPriority!;
@@ -90,7 +95,9 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
     if (picked == null) return;
     setState(() {
       _assetId = picked['id']?.toString();
-      _assetTag = picked['tag_number']?.toString();
+      _assetTag = picked['tag_number']?.toString().trim();
+      if (_assetTag != null && _assetTag!.isEmpty) _assetTag = null;
+      _assetDisplayLabel = assetDisplayLabel(picked);
       final area = picked['area_name']?.toString();
       if (area != null && area.isNotEmpty) _location.text = area;
     });
@@ -129,7 +136,10 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
         problemDescription: _description.text.trim(),
         functionalLocation: _location.text.trim(),
         assetId: _assetId,
-        assetTag: _assetTag,
+        assetTag: assetTagFromStored(
+          tag: _assetTag,
+          displayLabel: _assetDisplayLabel,
+        ),
         priority: _priority,
         photos: [
           for (final p in _photos)
@@ -190,10 +200,10 @@ class _CreateWorkRequestScreenState extends State<CreateWorkRequestScreen> {
           const SizedBox(height: 10),
           HeevyListTile(
             icon: Icons.precision_manufacturing_outlined,
-            title: _assetTag?.trim().isNotEmpty == true
-                ? 'Asset: ${_assetTag!.trim()}'
+            title: _assetDisplayLabel?.trim().isNotEmpty == true
+                ? 'Asset: ${_assetDisplayLabel!.trim()}'
                 : 'Link asset (optional)',
-            subtitle: _assetTag?.trim().isNotEmpty == true
+            subtitle: _assetDisplayLabel?.trim().isNotEmpty == true
                 ? 'Tap to change'
                 : 'Pick from your site register',
             onTap: _pickAsset,

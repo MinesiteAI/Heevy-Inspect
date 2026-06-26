@@ -236,8 +236,10 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
                 HeevyListTile(
                   icon: Icons.add_a_photo_outlined,
                   title: 'Quick capture',
-                  subtitle: 'Photo-first — snap, note, auto draft WR',
-                  accent: true,
+                  subtitle: entitlement.isOrgManager
+                      ? 'Photo-first — log for yourself; crew logs under Capture history'
+                      : 'Photo-first — snap, note, auto draft WR',
+                  accent: !entitlement.isOrgManager,
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -260,8 +262,8 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
                   icon: Icons.assignment_outlined,
                   title: 'Work requests',
                   subtitle: entitlement.isOrgManager
-                      ? 'Form-first drafts · team view for supervisors'
-                      : 'Form-first — create and submit draft requests',
+                      ? 'Form-first, no photo required · team view for supervisors'
+                      : 'Form-first, no photo required — create and submit drafts',
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
@@ -305,10 +307,10 @@ class _InspectHomeScreenState extends State<InspectHomeScreen> {
               const SizedBox(height: 10),
               HeevyListTile(
                 icon: Icons.history,
-                title: entitlement.isOrgManager ? 'Captures' : 'My captures',
+                title: 'Capture history',
                 subtitle: entitlement.isOrgManager
                     ? 'Your logs and read-only team history'
-                    : 'History of field submissions',
+                    : 'Past field captures and photos',
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(

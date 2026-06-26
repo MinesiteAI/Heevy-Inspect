@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../analytics/inspect_analytics.dart';
 import '../../config/heevy_brand.dart';
+import '../../features/assets/asset_display.dart';
 import '../../features/assets/asset_picker_sheet.dart';
 import '../../sync/offline_queue.dart';
 import '../../theme/app_colors.dart';
@@ -39,6 +40,7 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
   String _severity = _severities[2];
   String? _assetId;
   String? _assetTag;
+  String? _assetDisplayLabel;
   bool _submitting = false;
   bool _createWorkOrder = false;
   String? _error;
@@ -65,7 +67,9 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
     if (picked == null) return;
     setState(() {
       _assetId = picked['id']?.toString();
-      _assetTag = picked['tag_number']?.toString();
+      _assetTag = picked['tag_number']?.toString().trim();
+      if (_assetTag != null && _assetTag!.isEmpty) _assetTag = null;
+      _assetDisplayLabel = assetDisplayLabel(picked);
       final area = picked['area_name']?.toString();
       if (area != null && area.isNotEmpty) _area.text = area;
     });
@@ -103,7 +107,10 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       final result = await _svc.submitFieldCapture(
         plantArea: _area.text.trim(),
         assetId: _assetId,
-        assetTag: _assetTag,
+        assetTag: assetTagFromStored(
+          tag: _assetTag,
+          displayLabel: _assetDisplayLabel,
+        ),
         severity: _severity,
         notes: _notes.text.trim(),
         photos: [
@@ -169,7 +176,15 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
               payload: {
                 'plant_area': _area.text.trim(),
                 if (_assetId != null) 'asset_id': _assetId,
-                if (_assetTag != null) 'asset_tag': _assetTag,
+                if (assetTagFromStored(
+                      tag: _assetTag,
+                      displayLabel: _assetDisplayLabel,
+                    ) !=
+                    null)
+                  'asset_tag': assetTagFromStored(
+                    tag: _assetTag,
+                    displayLabel: _assetDisplayLabel,
+                  ),
                 'severity': _severity,
                 'notes': _notes.text.trim(),
                 if (photoPayloads.isNotEmpty) 'photo_payloads': photoPayloads,
@@ -247,9 +262,9 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _assetTag ?? 'Pick asset (optional)',
+                        _assetDisplayLabel ?? 'Pick asset (optional)',
                         style: TextStyle(
-                          color: _assetTag != null
+                          color: _assetDisplayLabel != null
                               ? AppColors.text(context)
                               : AppColors.textFaint(context),
                           fontSize: 16,
