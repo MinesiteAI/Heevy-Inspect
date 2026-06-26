@@ -16,17 +16,13 @@ function asRecord(v: unknown): Record<string, unknown> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
-  if (req.method !== "POST" && req.method !== "GET") {
-    return json({ error: "Use GET or POST" }, 405);
-  }
+  if (req.method !== "POST") return json({ error: "Use POST" }, 405);
 
   try {
     const auth = await verifyJwt(req);
     if (!auth.ok) return json({ error: auth.error }, auth.status);
 
-    const body = req.method === "POST"
-      ? asRecord(await req.json().catch(() => ({})))
-      : {};
+    const body = asRecord(await req.json());
     const scope = str(body.scope).toLowerCase() === "team" ? "team" : "mine";
 
     const admin = serviceClient();
@@ -34,7 +30,7 @@ Deno.serve(async (req) => {
     const pack = await fetchOrgPack(admin, workspace.organizationId);
 
     if (!packAllows(pack, "field_capture")) {
-      return json({ error: "Work requests not enabled" }, 403);
+      return json({ error: "Field captures not enabled" }, 403);
     }
 
     if (scope === "team" && !workspace.isOrgManager) {
@@ -42,36 +38,52 @@ Deno.serve(async (req) => {
     }
 
     let query = admin
-      .from("work_requests")
+      .from("field_captures")
       .select(
-        "id, wr_number, work_title, problem_description, status, priority, functional_location, photo_urls, created_at, linked_wo_id, created_by",
+        "id, created_at, plant_area, severity, notes, photo_urls, status, work_request_id, voice_transcript, created_by",
       )
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (scope === "team") {
-      if (!workspace.mineSiteId) {
-        return json({ error: "Site not provisioned yet" }, 400);
+      if (!workspace.organizationId) {
+        return json({ error: "Organization not provisioned" }, 400);
       }
-      query = query.eq("mine_site_id", workspace.mineSiteId);
+      query = query.eq("organization_id", workspace.organizationId);
     } else {
       query = query.eq("created_by", auth.userId);
-      if (workspace.mineSiteId) {
-        query = query.eq("mine_site_id", workspace.mineSiteId);
-      }
     }
 
     const { data, error } = await query;
     if (error) return json({ error: error.message }, 500);
 
-    const items = data ?? [];
-    const creatorIds = [
+    const captures = data ?? [];
+    const wrIds = [
       ...new Set(
-        items
-          .map((row) => str((row as Record<string, unknown>).created_by))
+        captures
+          .map((c) => str((c as Record<string, unknown>).work_request_id))
           .filter(Boolean),
       ),
     ];
+    const creatorIds = [
+      ...new Set(
+        captures
+          .map((c) => str((c as Record<string, unknown>).created_by))
+          .filter(Boolean),
+      ),
+    ];
+
+    const wrMap: Record<string, string> = {};
+    if (wrIds.length > 0) {
+      const { data: wrRows } = await admin
+        .from("work_requests")
+        .select("id, wr_number")
+        .in("id", wrIds);
+      for (const w of wrRows ?? []) {
+        const wid = str(w.id);
+        if (wid) wrMap[wid] = str(w.wr_number);
+      }
+    }
 
     const creatorNames: Record<string, string> = {};
     if (creatorIds.length > 0) {
@@ -86,11 +98,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const enriched = items.map((row) => {
-      const r = row as Record<string, unknown>;
-      const createdBy = str(r.created_by);
+    const items = captures.map((row) => {
+      const c = row as Record<string, unknown>;
+      const wrId = str(c.work_request_id);
+      const createdBy = str(c.created_by);
       return {
-        ...r,
+        ...c,
+        wr_number: wrId ? (wrMap[wrId] ?? null) : null,
         created_by_name: createdBy ? (creatorNames[createdBy] ?? null) : null,
       };
     });
@@ -99,7 +113,7 @@ Deno.serve(async (req) => {
       ok: true,
       scope,
       is_org_manager: workspace.isOrgManager,
-      items: enriched,
+      items,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

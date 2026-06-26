@@ -25,6 +25,9 @@ class WorkRequestDetailScreen extends StatefulWidget {
 class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
   late Future<Map<String, dynamic>> _future;
   late Future<List<String>> _photosFuture;
+  bool _submitting = false;
+
+  WorkRequestService get _svc => WorkRequestService(Supabase.instance.client);
 
   @override
   void initState() {
@@ -34,8 +37,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
   }
 
   void _load() {
-    _future = WorkRequestService(Supabase.instance.client)
-        .getWorkRequest(widget.workRequestId);
+    _future = _svc.getWorkRequest(widget.workRequestId);
     _photosFuture = _future.then((payload) {
       final wr = payload['work_request'] as Map<String, dynamic>? ?? {};
       final raw = wr['photo_urls'];
@@ -44,13 +46,45 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
     });
   }
 
-  String _statusMessage(String? status) {
+  Future<void> _submitDraft() async {
+    setState(() => _submitting = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await _svc.submitWorkRequest(widget.workRequestId);
+      if (!mounted) return;
+      final msg = result['message']?.toString() ??
+          'Submitted to your site queue.';
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
+      setState(() {
+        _load();
+      });
+      await InspectAnalytics.track('wr_submit');
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: const Color(0xFFFF453A),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  String _statusMessage(String? status, {required bool readOnly}) {
     final s = (status ?? '').toLowerCase();
     if (s == 'draft') {
-      return 'Saved — upgrade to Plant CMMS to route for approval.';
+      if (readOnly) {
+        return 'Draft — waiting for the requester to submit to the site queue.';
+      }
+      return 'Draft — submit to notify your supervisor and add to the web queue.';
     }
     if (s == 'open') {
-      return 'Submitted to your org.';
+      return 'Submitted to your org. Visible on web for review and action.';
+    }
+    if (s == 'pending approval') {
+      return 'In the approval queue on web.';
     }
     return status ?? '';
   }
@@ -84,6 +118,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
           );
           final capture = payload['field_capture'] as Map?;
           final linkedWo = payload['linked_work_order'] as Map?;
+          final readOnly = payload['read_only'] == true;
 
           final title = wr['work_title']?.toString() ?? 'Work request';
           final num = wr['wr_number']?.toString() ?? '';
@@ -91,6 +126,8 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
           final priority = wr['priority']?.toString() ?? '';
           final location = wr['functional_location']?.toString() ?? '';
           final description = wr['problem_description']?.toString() ?? '';
+          final creator = wr['created_by_name']?.toString() ?? '';
+          final isDraft = status.toLowerCase() == 'draft';
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -113,12 +150,19 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                   ),
                 ),
               ],
+              if (readOnly && creator.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Logged by $creator',
+                  style: TextStyle(color: AppColors.textFaint(context)),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 [status, priority, location].where((s) => s.isNotEmpty).join(' · '),
                 style: TextStyle(color: AppColors.textFaint(context)),
               ),
-              if (_statusMessage(status).isNotEmpty) ...[
+              if (_statusMessage(status, readOnly: readOnly).isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -128,7 +172,7 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                     border: Border.all(color: AppColors.border(context)),
                   ),
                   child: Text(
-                    _statusMessage(status),
+                    _statusMessage(status, readOnly: readOnly),
                     style: TextStyle(color: AppColors.muted, height: 1.35),
                   ),
                 ),
@@ -149,6 +193,23 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                   style: TextStyle(color: AppColors.textMuted(context)),
                 ),
               ],
+              if (isDraft && !readOnly) ...[
+                const SizedBox(height: 24),
+                HeevyPrimaryButton(
+                  label: _submitting ? 'Submitting…' : 'Submit to site queue',
+                  loading: _submitting,
+                  onTap: _submitting ? null : _submitDraft,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Notifies your supervisor. Full approval workflow on web Plant CMMS.',
+                  style: TextStyle(
+                    color: AppColors.textFaint(context),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
               const SizedBox(height: 28),
               if (capture != null)
                 HeevyListTile(
@@ -165,51 +226,59 @@ class _WorkRequestDetailScreenState extends State<WorkRequestDetailScreen> {
                     );
                   },
                 ),
-              const SizedBox(height: 10),
-              HeevyListTile(
-                icon: Icons.build_outlined,
-                title: 'Create work order',
-                subtitle: 'Turn this request into a trackable WO',
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CreateWorkOrderScreen(
-                        initialTitle: title,
-                        initialDescription: description,
-                        initialLocation: location,
-                        sourceType: 'work_request',
-                        sourceId: widget.workRequestId,
+              if (!readOnly) ...[
+                const SizedBox(height: 10),
+                HeevyListTile(
+                  icon: Icons.build_outlined,
+                  title: 'Create work order',
+                  subtitle: 'Turn this request into a trackable WO',
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreateWorkOrderScreen(
+                          initialTitle: title,
+                          initialDescription: description,
+                          initialLocation: location,
+                          sourceType: 'work_request',
+                          sourceId: widget.workRequestId,
+                        ),
                       ),
-                    ),
-                  );
-                  await InspectAnalytics.track('wr_to_wo');
-                },
-              ),
+                    );
+                    await InspectAnalytics.track('wr_to_wo');
+                  },
+                ),
+              ],
               const SizedBox(height: 10),
               AskFieldGuideTile(
                 subtitle: 'Questions about this request',
                 sourceType: 'work_request',
                 sourceId: widget.workRequestId,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Plant CMMS features',
-                style: TextStyle(
-                  color: AppColors.text(context),
-                  fontWeight: FontWeight.w600,
+              if (!isDraft) ...[
+                const SizedBox(height: 16),
+                HeevySecondaryButton(
+                  label: 'Open on web',
+                  onTap: () => launchUrl(
+                    HeevyUrls.workRequestOnWeb(widget.workRequestId),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              _LockedAction(
-                icon: Icons.send_outlined,
-                label: 'Submit for approval',
-                onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
-              ),
-              _LockedAction(
-                icon: Icons.groups_outlined,
-                label: 'Assign crew',
-                onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
-              ),
+              ],
+              if (!readOnly && !isDraft) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Plant CMMS features',
+                  style: TextStyle(
+                    color: AppColors.text(context),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _LockedAction(
+                  icon: Icons.groups_outlined,
+                  label: 'Assign crew',
+                  onUpgrade: () => launchUrl(HeevyUrls.captureUpgrade()),
+                ),
+              ],
             ],
           );
         },

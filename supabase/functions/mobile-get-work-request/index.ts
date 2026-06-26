@@ -34,12 +34,7 @@ Deno.serve(async (req) => {
       return json({ error: "Work requests not enabled" }, 403);
     }
 
-    let query = admin
-      .from("work_requests")
-      .select("*")
-      .eq("id", id)
-      .eq("created_by", auth.userId);
-
+    let query = admin.from("work_requests").select("*").eq("id", id);
     if (workspace.mineSiteId) {
       query = query.eq("mine_site_id", workspace.mineSiteId);
     }
@@ -48,9 +43,14 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message }, 500);
     if (!wr) return json({ error: "Not found" }, 404);
 
+    const createdBy = str(wr.created_by);
+    if (createdBy !== auth.userId && !workspace.isOrgManager) {
+      return json({ error: "Forbidden" }, 403);
+    }
+
     const { data: capture } = await admin
       .from("field_captures")
-      .select("id, plant_area, severity, notes, photo_urls, created_at")
+      .select("id, plant_area, severity, notes, photo_urls, created_at, created_by")
       .eq("work_request_id", id)
       .maybeSingle();
 
@@ -65,11 +65,22 @@ Deno.serve(async (req) => {
       linkedWo = wo as Record<string, unknown> | null;
     }
 
+    let createdByName: string | null = null;
+    if (createdBy) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", createdBy)
+        .maybeSingle();
+      createdByName = str(profile?.full_name) || str(profile?.email) || null;
+    }
+
     return json({
       ok: true,
-      work_request: wr,
+      work_request: { ...wr, created_by_name: createdByName },
       field_capture: capture,
       linked_work_order: linkedWo,
+      read_only: workspace.isOrgManager && createdBy !== auth.userId,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

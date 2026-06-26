@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/workspace_context.dart';
+import '../../sync/offline_queue.dart';
 import 'pm_generate_work_order_ui.dart';
 
 const _kFormBg = Color(0xFFFDFBF6);
@@ -177,6 +178,46 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
       area: (widget.pmTemplateShell['plant_area'] as String?) ?? '',
       title: (widget.pmTemplateShell['pm_title'] as String?) ?? 'PM',
     );
+  }
+
+  String _fieldLabel(String fieldId) {
+    for (final sec in _sections) {
+      final fields = sec['fields'];
+      if (fields is! List) continue;
+      for (final f in fields) {
+        if (f is! Map) continue;
+        final id = f['id']?.toString() ?? '';
+        if (id == fieldId) {
+          final label = f['label']?.toString().trim();
+          if (label != null && label.isNotEmpty) return label;
+        }
+      }
+    }
+    return fieldId;
+  }
+
+  List<String> _collectDefectNotes() {
+    final notes = <String>[];
+    for (final e in _checkStatus.entries) {
+      if (e.value != 'defective') continue;
+      final label = _fieldLabel(e.key);
+      final comment = _checkCommentCtrls[e.key]?.text.trim() ?? '';
+      notes.add(comment.isNotEmpty ? '$label: $comment' : label);
+    }
+    return notes;
+  }
+
+  List<Map<String, String>> _collectDefectRecords() {
+    final rows = <Map<String, String>>[];
+    for (final e in _checkStatus.entries) {
+      if (e.value != 'defective') continue;
+      rows.add({
+        'task_id': e.key,
+        'task': _fieldLabel(e.key),
+        'comment': _checkCommentCtrls[e.key]?.text.trim() ?? '',
+      });
+    }
+    return rows;
   }
 
   void _hydrateFromSubmission() {
@@ -585,6 +626,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
       ...webFlat,
       '__mobile_v1': <String, dynamic>{
         'form_data': formData,
+        'defects': _collectDefectRecords(),
         'shell': <String, dynamic>{
           'pm_title': pmTitleForShell,
           'discipline': t['discipline'],
@@ -621,6 +663,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
     try {
       final p = await _buildPayload();
       final user = Supabase.instance.client.auth.currentUser;
+      final workspace = await fetchWorkspaceContext(Supabase.instance.client);
       final draftName = p.nameTrim.isEmpty ? 'Draft' : p.nameTrim;
       final row = <String, dynamic>{
         'template_id': widget.scheduleTemplateId,
@@ -631,6 +674,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
         'status': 'draft',
         'mobile_line_item_id': li,
         if (user?.id != null) 'created_by': user!.id,
+        if (workspace.mineSiteId != null) 'mine_site_id': workspace.mineSiteId,
       };
       final id = _persistedDraftId?.trim();
       if (id != null && id.isNotEmpty) {
@@ -674,6 +718,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
     try {
       final p = await _buildPayload();
       final user = Supabase.instance.client.auth.currentUser;
+      final workspace = await fetchWorkspaceContext(Supabase.instance.client);
       final updateId = (_persistedDraftId ?? widget.draftSubmissionId)?.trim();
       if (updateId != null && updateId.isNotEmpty) {
         final upd = <String, dynamic>{
@@ -688,47 +733,32 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
         final li = widget.mobileLineItemId?.trim();
         if (li != null && li.isNotEmpty) upd['mobile_line_item_id'] = li;
         if (user?.id != null) upd['created_by'] = user!.id;
+        if (workspace.mineSiteId != null) upd['mine_site_id'] = workspace.mineSiteId;
         await Supabase.instance.client.from('pm_form_submissions').update(upd).eq('id', updateId);
       } else {
         String? submissionId;
-        try {
-          final fn = await Supabase.instance.client.functions.invoke(
-            'mobile-submit-pm-inspection',
-            body: <String, dynamic>{
-              'pm_form': <String, dynamic>{
-                'template_id': widget.scheduleTemplateId,
-                'submitter_name': nameTrim,
-                'submitter_email': user?.email,
-                'form_values': p.formValuesOut,
-                'notes': p.notesOut,
-              },
+        final fn = await Supabase.instance.client.functions.invoke(
+          'mobile-submit-pm-inspection',
+          body: <String, dynamic>{
+            'pm_form': <String, dynamic>{
+              'template_id': widget.scheduleTemplateId,
+              'submitter_name': nameTrim,
+              'submitter_email': user?.email,
+              'form_values': p.formValuesOut,
+              'notes': p.notesOut,
             },
-          );
-          if (fn.status >= 400) {
-            throw Exception('Submit failed (${fn.status})');
-          }
+          },
+        );
+        if (fn.status >= 400) {
           final data = fn.data;
-          if (data is Map) {
-            submissionId = data['pm_submission_id']?.toString();
-          }
-        } catch (_) {
-          final insertRow = <String, dynamic>{
-            'template_id': widget.scheduleTemplateId,
-            'submitter_name': nameTrim,
-            'submitter_email': user?.email,
-            'form_values': p.formValuesOut,
-            'notes': p.notesOut,
-            'status': 'submitted',
-          };
-          final li = widget.mobileLineItemId?.trim();
-          if (li != null && li.isNotEmpty) insertRow['mobile_line_item_id'] = li;
-          if (user?.id != null) insertRow['created_by'] = user!.id;
-          final inserted = await Supabase.instance.client
-              .from('pm_form_submissions')
-              .insert(insertRow)
-              .select('id')
-              .maybeSingle();
-          submissionId = inserted?['id']?.toString();
+          final msg = data is Map
+              ? (data['error']?.toString() ?? 'Submit failed (${fn.status})')
+              : 'Submit failed (${fn.status})';
+          throw Exception(msg);
+        }
+        final data = fn.data;
+        if (data is Map) {
+          submissionId = data['pm_submission_id']?.toString();
         }
 
         if (!mounted) return;
@@ -736,13 +766,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
           const SnackBar(content: Text('Inspection submitted')),
         );
 
-        final defectNotes = <String>[];
-        for (final e in _checkStatus.entries) {
-          if (e.value == 'defective') {
-            final comment = _checkCommentCtrls[e.key]?.text.trim() ?? '';
-            defectNotes.add(comment.isNotEmpty ? comment : 'Defective item: ${e.key}');
-          }
-        }
+        final defectNotes = _collectDefectNotes();
         if (defectNotes.isNotEmpty) {
           await showPmGenerateWorkOrderDialog(
             context,
@@ -763,13 +787,7 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
         const SnackBar(content: Text('Inspection submitted')),
       );
 
-      final defectNotes = <String>[];
-      for (final e in _checkStatus.entries) {
-        if (e.value == 'defective') {
-          final comment = _checkCommentCtrls[e.key]?.text.trim() ?? '';
-          defectNotes.add(comment.isNotEmpty ? comment : 'Defective item: ${e.key}');
-        }
-      }
+      final defectNotes = _collectDefectNotes();
       if (defectNotes.isNotEmpty) {
         await showPmGenerateWorkOrderDialog(
           context,
@@ -784,6 +802,40 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
+      if (isLikelyOfflineError(e)) {
+        try {
+          final p = await _buildPayload();
+          final user = Supabase.instance.client.auth.currentUser;
+          await OfflineQueue().enqueue(
+            OfflineQueueItem(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              type: OfflineQueueItemType.pmInspection,
+              createdAt: DateTime.now(),
+              label: widget.scheduleName ?? widget.scheduleTemplateId,
+              payload: {
+                'pm_form': {
+                  'template_id': widget.scheduleTemplateId,
+                  'submitter_name': nameTrim,
+                  'submitter_email': user?.email,
+                  'form_values': p.formValuesOut,
+                  'notes': p.notesOut,
+                },
+              },
+            ),
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Saved offline — PM will sync when you are back online.',
+              ),
+            ),
+          );
+          Navigator.of(context).pop();
+          return;
+        } catch (_) {
+          // Fall through.
+        }
+      }
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to submit: $e')),
@@ -803,7 +855,8 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
         elevation: 0,
         title: Text(widget.readOnly ? 'Submitted PM' : 'PM Inspection', style: const TextStyle(fontSize: 16)),
         actions: [
-          if (!widget.readOnly)
+          if (!widget.readOnly &&
+              widget.mobileLineItemId?.trim().isNotEmpty == true)
             TextButton(
               onPressed: (_savingDraft || _submitting) ? null : _saveDraft,
               child: Text(
@@ -923,18 +976,22 @@ class _SchedulePmFormScreenState extends State<SchedulePmFormScreen> {
           ),
           if (!widget.readOnly) ...[
             const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: (_savingDraft || _submitting) ? null : _saveDraft,
-              icon: _savingDraft
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined, size: 18),
-              label: Text(_savingDraft ? 'Saving draft…' : 'Save draft & exit later'),
-            ),
-            const SizedBox(height: 10),
+            if (widget.mobileLineItemId?.trim().isNotEmpty == true)
+              OutlinedButton.icon(
+                onPressed: (_savingDraft || _submitting) ? null : _saveDraft,
+                icon: _savingDraft
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined, size: 18),
+                label: Text(
+                  _savingDraft ? 'Saving draft…' : 'Save draft & exit later',
+                ),
+              ),
+            if (widget.mobileLineItemId?.trim().isNotEmpty == true)
+              const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: (_submitting || _savingDraft) ? null : _submit,
               icon: _submitting

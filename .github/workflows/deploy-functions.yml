@@ -47,6 +47,13 @@ jobs:
             mobile-get-work-order
             mobile-list-work-requests
             mobile-get-work-request
+            mobile-create-work-request
+            mobile-submit-work-request
+            mobile-list-field-captures
+            mobile-list-pm-schedule
+            mobile-list-notifications
+            mobile-update-notification
+            mobile-register-push-token
             mobile-create-pm-template
             mobile-field-chat
             mobile-sign-storage-urls

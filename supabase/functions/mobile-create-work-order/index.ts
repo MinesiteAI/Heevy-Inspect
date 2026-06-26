@@ -11,6 +11,7 @@ import {
   verifyJwt,
   writeAuditLog,
 } from "../_shared/inspect-auth.ts";
+import { notifyOrgManagers } from "../_shared/mobile-notify.ts";
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -86,6 +87,22 @@ Deno.serve(async (req) => {
       entityId: created?.id ?? "",
       newValue: created as Record<string, unknown>,
       metadata: { source: "heevy_inspect" },
+    });
+
+    const woNum = str(created?.work_order_number);
+    const submitter = workspace.fullName ?? auth.email ?? "A crew member";
+    await notifyOrgManagers(admin, workspace.organizationId, {
+      excludeUserId: auth.userId,
+      type: "work_order_created",
+      title: "New work order",
+      body: `${submitter} created ${woNum}: ${title}`,
+      payloadJson: {
+        work_order_id: created?.id ?? null,
+        work_order_number: woNum,
+      },
+      workOrderId: str(created?.id) || null,
+      workOrderNumber: woNum || null,
+      dedupeKey: `wo_create_${str(created?.id)}`,
     });
 
     return json({ ok: true, work_order: created });

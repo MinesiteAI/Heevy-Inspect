@@ -30,6 +30,72 @@ function buildFormStructure(taskLines: string[]): Record<string, unknown> {
   };
 }
 
+const ALLOWED_DISCIPLINES = new Set([
+  "Mechanical",
+  "Electrical",
+  "Ops",
+  "Mobile Equipment",
+  "Mobile & LVs",
+  "Unassigned",
+]);
+
+const FREQUENCY_ALIASES: Record<string, string> = {
+  Daily: "Daily",
+  Weekly: "1 Week",
+  "1 Week": "1 Week",
+  "2 Week": "2 Week",
+  Monthly: "4 Week",
+  "4 Week": "4 Week",
+  Quarterly: "12 Week",
+  "6 Week": "6 Week",
+  "12 Week": "12 Week",
+  "6 Monthly": "26 Week",
+  "24 Week": "24 Week",
+  "26 Week": "26 Week",
+  Annual: "52 Week",
+  "52 Week": "52 Week",
+};
+
+function normalizeFrequency(raw: string): string {
+  const trimmed = raw.trim();
+  return FREQUENCY_ALIASES[trimmed] ?? trimmed;
+}
+
+function normalizeDiscipline(raw: string): string {
+  const trimmed = raw.trim() || "Mechanical";
+  return ALLOWED_DISCIPLINES.has(trimmed) ? trimmed : "Unassigned";
+}
+
+function resolveEquipmentType(
+  tpl: Record<string, unknown>,
+  body: Record<string, unknown>,
+  plantArea: string,
+  pmName: string,
+): string {
+  const explicit = str(tpl.equipment_type) || str(body.equipment_type);
+  if (explicit) return explicit;
+  if (plantArea.trim()) return plantArea.trim();
+  const fromName = pmName.replace(/^the\s+/i, "").trim();
+  if (fromName.length > 0 && fromName.length <= 80) return fromName;
+  return "General";
+}
+
+function slugifyTemplateKey(raw: string, maxLen = 40): string {
+  const slug = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, maxLen);
+  return slug.length > 0 ? slug : "pm_template";
+}
+
+/** Globally unique slug — scoped by mine site to avoid cross-tenant collisions. */
+function buildScheduleTemplateId(pmName: string, mineSiteId: string): string {
+  const siteKey = mineSiteId.replace(/-/g, "").slice(0, 8);
+  const nameKey = slugifyTemplateKey(pmName);
+  return `hi_${siteKey}_${nameKey}`.slice(0, 80);
+}
+
 async function countByDiscipline(
   admin: ReturnType<typeof serviceClient>,
   organizationId: string,
@@ -92,9 +158,14 @@ Deno.serve(async (req) => {
     }
 
     const pmName = str(tpl.pm_name) || str(body.pm_name) || "Field inspection";
-    const discipline = str(tpl.discipline) || str(body.discipline) || "Mechanical";
+    const discipline = normalizeDiscipline(
+      str(tpl.discipline) || str(body.discipline) || "Mechanical",
+    );
     const plantArea = str(tpl.plant_area) || str(body.plant_area) || "";
-    const frequency = str(tpl.frequency) || str(body.frequency) || "Monthly";
+    const frequency = normalizeFrequency(
+      str(tpl.frequency) || str(body.frequency) || "4 Week",
+    );
+    const equipmentType = resolveEquipmentType(tpl, body, plantArea, pmName);
     const taskLines = Array.isArray(body.task_lines)
       ? body.task_lines.map((t) => str(t)).filter(Boolean)
       : Array.isArray(tpl.task_lines)
@@ -132,6 +203,7 @@ Deno.serve(async (req) => {
       .from("pm_master_list")
       .insert({
         pm_name: pmName,
+        equipment_type: equipmentType,
         plant_area: plantArea,
         discipline,
         frequency,
@@ -148,11 +220,13 @@ Deno.serve(async (req) => {
     if (masterErr) return json({ error: masterErr.message }, 500);
 
     const formStructure = buildFormStructure(taskLines);
+    const templateId = buildScheduleTemplateId(pmName, workspace.mineSiteId);
     const { data: schedule, error: schedErr } = await admin
       .from("pm_schedule_templates")
       .insert({
+        template_id: templateId,
         name: pmName,
-        area: plantArea,
+        area: plantArea || "Site",
         frequency_type: frequency,
         form_structure: formStructure,
         is_active: true,
@@ -162,7 +236,10 @@ Deno.serve(async (req) => {
       .select("id, name, area, frequency_type, form_structure, pm_master_list_id")
       .single();
 
-    if (schedErr) return json({ error: schedErr.message }, 500);
+    if (schedErr) {
+      await admin.from("pm_master_list").delete().eq("id", master?.id);
+      return json({ error: schedErr.message }, 500);
+    }
 
     await writeAuditLog(admin, {
       userId: auth.userId,

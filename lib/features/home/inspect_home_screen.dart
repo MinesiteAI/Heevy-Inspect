@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../analytics/inspect_analytics.dart';
 import '../../billing/entitlement_service.dart';
 import '../../config/heevy_brand.dart';
+import '../../notifications/notification_service.dart';
+import '../../sync/offline_sync_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_mode.dart';
 import '../../widgets/field_guide_fab.dart';
@@ -12,18 +14,68 @@ import '../../widgets/heevy_ui.dart';
 import '../capture/capture_history_screen.dart';
 import '../capture/quick_capture_screen.dart';
 import '../inspections/inspections_home_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../upgrade/upgrade_screen.dart';
 import '../work_orders/work_orders_list_screen.dart';
 import '../work_requests/work_requests_list_screen.dart';
 
-class InspectHomeScreen extends StatelessWidget {
+class InspectHomeScreen extends StatefulWidget {
   const InspectHomeScreen({super.key, required this.entitlement});
 
   final EntitlementResult entitlement;
 
   @override
+  State<InspectHomeScreen> createState() => _InspectHomeScreenState();
+}
+
+class _InspectHomeScreenState extends State<InspectHomeScreen> {
+  int _offlinePending = 0;
+  int _unreadNotifications = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshBadges();
+  }
+
+  Future<void> _refreshBadges() async {
+    final client = Supabase.instance.client;
+    final pending = await OfflineSyncService(client).pendingCount();
+    var unread = 0;
+    try {
+      final page = await NotificationService(client).list(limit: 1);
+      unread = page.unreadCount;
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _offlinePending = pending;
+        _unreadNotifications = unread;
+      });
+    }
+  }
+
+  Future<void> _syncOffline() async {
+    final result =
+        await OfflineSyncService(Supabase.instance.client).syncAll();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.synced > 0
+              ? 'Synced ${result.synced} offline item(s)'
+              : result.remaining > 0
+              ? 'Some items still waiting — check connection'
+              : 'Nothing to sync',
+        ),
+      ),
+    );
+    await _refreshBadges();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final orgName = entitlement.organizationName;
+    final orgName = widget.entitlement.organizationName;
+    final entitlement = widget.entitlement;
 
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
@@ -33,6 +85,37 @@ class InspectHomeScreen extends StatelessWidget {
           floatingActionButton: const FieldGuideFab(),
           appBar: HeevyBrandedAppBar(
             actions: [
+              if (_offlinePending > 0)
+                IconButton(
+                  tooltip: 'Sync offline queue',
+                  onPressed: _syncOffline,
+                  icon: Badge(
+                    label: Text('$_offlinePending'),
+                    child: Icon(
+                      Icons.cloud_upload_outlined,
+                      color: AppColors.textMuted(context),
+                    ),
+                  ),
+                ),
+              IconButton(
+                tooltip: 'Notifications',
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsScreen(),
+                    ),
+                  );
+                  await _refreshBadges();
+                },
+                icon: Badge(
+                  isLabelVisible: _unreadNotifications > 0,
+                  label: Text('$_unreadNotifications'),
+                  child: Icon(
+                    Icons.notifications_outlined,
+                    color: AppColors.textMuted(context),
+                  ),
+                ),
+              ),
               IconButton(
                 tooltip: 'Theme',
                 onPressed: () {
@@ -100,6 +183,27 @@ class InspectHomeScreen extends StatelessWidget {
                   height: 1.35,
                 ),
               ),
+              if (_offlinePending > 0) ...[
+                const SizedBox(height: 16),
+                Material(
+                  color: AppColors.surface(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.cloud_off_outlined,
+                      color: AppColors.textMuted(context),
+                    ),
+                    title: Text(
+                      '$_offlinePending item(s) waiting to sync',
+                      style: TextStyle(color: AppColors.text(context)),
+                    ),
+                    trailing: TextButton(
+                      onPressed: _syncOffline,
+                      child: const Text('Sync now'),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'What would you like to do?',
@@ -114,7 +218,7 @@ class InspectHomeScreen extends StatelessWidget {
                 HeevyListTile(
                   icon: Icons.add_a_photo_outlined,
                   title: 'Quick capture',
-                  subtitle: 'Photo, area, severity → work request or WO',
+                  subtitle: 'Photo-first — snap, note, auto draft WR',
                   accent: true,
                   onTap: () async {
                     await Navigator.of(context).push(
@@ -123,6 +227,7 @@ class InspectHomeScreen extends StatelessWidget {
                       ),
                     );
                     await InspectAnalytics.track('quick_capture_open');
+                    await _refreshBadges();
                   },
                 ),
               if (!entitlement.allowsFieldCapture)
@@ -136,11 +241,15 @@ class InspectHomeScreen extends StatelessWidget {
                 HeevyListTile(
                   icon: Icons.assignment_outlined,
                   title: 'Work requests',
-                  subtitle: 'Draft and open requests from your captures',
+                  subtitle: entitlement.isOrgManager
+                      ? 'Form-first drafts · team view for supervisors'
+                      : 'Form-first — create and submit draft requests',
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const WorkRequestsListScreen(),
+                        builder: (_) => WorkRequestsListScreen(
+                          entitlement: entitlement,
+                        ),
                       ),
                     );
                     await InspectAnalytics.track('wr_list_view');
@@ -151,11 +260,12 @@ class InspectHomeScreen extends StatelessWidget {
                 HeevyListTile(
                   icon: Icons.fact_check_outlined,
                   title: 'Inspections',
-                  subtitle: 'Templates, results, and create new checklists',
+                  subtitle: 'Planned PM checklists · ad-hoc vs scheduled',
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => InspectionsHomeScreen(entitlement: entitlement),
+                        builder: (_) =>
+                            InspectionsHomeScreen(entitlement: entitlement),
                       ),
                     );
                   },
@@ -177,14 +287,19 @@ class InspectHomeScreen extends StatelessWidget {
               const SizedBox(height: 10),
               HeevyListTile(
                 icon: Icons.history,
-                title: 'My captures',
-                subtitle: 'History of field submissions',
-                onTap: () {
-                  Navigator.of(context).push(
+                title: entitlement.isOrgManager ? 'Captures' : 'My captures',
+                subtitle: entitlement.isOrgManager
+                    ? 'Your logs and read-only team history'
+                    : 'History of field submissions',
+                onTap: () async {
+                  await Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => const CaptureHistoryScreen(),
+                      builder: (_) => CaptureHistoryScreen(
+                        entitlement: entitlement,
+                      ),
                     ),
                   );
+                  await _refreshBadges();
                 },
               ),
               const SizedBox(height: 10),

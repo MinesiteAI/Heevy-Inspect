@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import 'create_pm_template_screen.dart';
 import 'pm_submission_list_screen.dart';
+import 'pm_schedule_inbox_screen.dart';
 import 'pm_templates_list_screen.dart';
 
 class InspectionsHomeScreen extends StatefulWidget {
@@ -72,6 +73,19 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          HeevyListTile(
+            icon: Icons.calendar_today_outlined,
+            title: 'PM schedule inbox',
+            subtitle: 'Due today, overdue, and upcoming (read-only)',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PmScheduleInboxScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
           if (entitlement.allowsPmTemplateCreate)
             HeevyListTile(
               icon: Icons.add_circle_outline,
@@ -83,7 +97,8 @@ class _InspectionsHomeScreenState extends State<InspectionsHomeScreen> {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => CreatePmTemplateScreen(entitlement: entitlement),
+                    builder: (_) =>
+                        CreatePmTemplateScreen(entitlement: entitlement),
                   ),
                 );
               },

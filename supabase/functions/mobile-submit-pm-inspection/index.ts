@@ -10,6 +10,7 @@ import {
   verifyJwt,
   writeAuditLog,
 } from "../_shared/inspect-auth.ts";
+import { notifyOrgManagers } from "../_shared/mobile-notify.ts";
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -52,7 +53,6 @@ Deno.serve(async (req) => {
       week_start: pmForm.week_start ?? null,
       created_by: auth.userId,
       mine_site_id: workspace.mineSiteId,
-      organization_id: workspace.organizationId,
     };
 
     const { data: pmData, error: pmErr } = await admin
@@ -69,6 +69,19 @@ Deno.serve(async (req) => {
       entityType: "pm_form_submission",
       entityId: pmData?.id ?? "",
       newValue: { template_id: pmFormTemplateId },
+    });
+
+    const submitter = str(pmForm.submitter_name) || workspace.fullName || auth.email || "Inspector";
+    await notifyOrgManagers(admin, workspace.organizationId, {
+      excludeUserId: auth.userId,
+      type: "pm_inspection_submitted",
+      title: "PM inspection submitted",
+      body: `${submitter} submitted ${pmFormTemplateId}`,
+      payloadJson: {
+        pm_submission_id: pmData?.id ?? null,
+        template_id: pmFormTemplateId,
+      },
+      dedupeKey: `pm_submit_${str(pmData?.id)}`,
     });
 
     return json({

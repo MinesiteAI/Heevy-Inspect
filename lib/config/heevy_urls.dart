@@ -16,6 +16,9 @@ abstract final class HeevyUrls {
 
   static Uri captureUpgrade() => Uri.parse('$appBase/capture/upgrade');
 
+  static Uri workRequestOnWeb(String workRequestId) =>
+      Uri.parse('$appBase/plant/work-requests?id=$workRequestId');
+
   static Uri auth({String? redirect, String? email}) {
     final params = <String, String>{'brand': 'heevy_inspect'};
     if (redirect != null && redirect.isNotEmpty) params['redirect'] = redirect;

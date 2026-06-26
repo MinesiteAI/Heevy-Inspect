@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
 import '../auth/login_screen.dart';
 import '../billing/entitlement_refresh.dart';
 import '../billing/entitlement_service.dart';
 import '../features/home/inspect_home_screen.dart';
+import '../notifications/push_registration.dart';
 import '../onboarding/setup_home_screen.dart';
+import '../sync/offline_sync_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/heevy_brand_title.dart';
 import '../widgets/heevy_ui.dart';
@@ -75,6 +78,8 @@ class _EntitlementGateState extends State<EntitlementGate> {
         _entitlement = result;
         _loading = false;
       });
+      await PushRegistration.registerIfSignedIn(Supabase.instance.client);
+      unawaited(OfflineSyncService(Supabase.instance.client).syncAll());
     } catch (e) {
       if (!mounted) return;
       if (_isAuthFailure(e)) {

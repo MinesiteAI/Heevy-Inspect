@@ -7,6 +7,10 @@ import {
   str,
   verifyJwt,
 } from "../_shared/inspect-auth.ts";
+import {
+  extractPmDefects,
+  formatPmDefectsForPrompt,
+} from "../_shared/pm-defect-context.ts";
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -63,7 +67,59 @@ Deno.serve(async (req) => {
     });
 
     const contextParts: string[] = [];
-    if (sourceType && sourceId) {
+
+    async function appendPmSubmissionContext(
+      submissionId: string,
+      label: string,
+    ): Promise<void> {
+      const { data: sub } = await admin
+        .from("pm_form_submissions")
+        .select("id, template_id, status, submitted_at, notes, form_values")
+        .eq("id", submissionId)
+        .maybeSingle();
+      if (!sub) return;
+
+      const { data: tpl } = await admin
+        .from("pm_schedule_templates")
+        .select("name, area, form_structure")
+        .eq("id", sub.template_id)
+        .maybeSingle();
+
+      const defects = extractPmDefects(sub.form_values, tpl?.form_structure);
+      contextParts.push(
+        `${label} PM inspection "${tpl?.name ?? "checklist"}" (${sub.status ?? "submitted"}):`,
+      );
+      contextParts.push(
+        `Defective items: ${formatPmDefectsForPrompt(defects)}`,
+      );
+      if (sub.notes) contextParts.push(`Inspector notes: ${sub.notes}`);
+    }
+
+    if (sourceType === "work_order" && sourceId) {
+      let woQuery = admin
+        .from("work_orders")
+        .select(
+          "id, work_order_number, title, description, status, priority, location, source_type, source_id, notes",
+        )
+        .eq("id", sourceId);
+      if (workspace.mineSiteId) {
+        woQuery = woQuery.eq("mine_site_id", workspace.mineSiteId);
+      }
+      const { data: wo } = await woQuery.maybeSingle();
+      if (wo) {
+        contextParts.push(
+          `Focused work order ${wo.work_order_number}: title="${wo.title}", description="${wo.description ?? ""}", location="${wo.location ?? ""}", status=${wo.status}, priority=${wo.priority}.`,
+        );
+        if (wo.source_type === "pm_submission" && wo.source_id) {
+          await appendPmSubmissionContext(
+            String(wo.source_id),
+            "Linked",
+          );
+        }
+      }
+    } else if (sourceType === "pm_submission" && sourceId) {
+      await appendPmSubmissionContext(sourceId, "Focused");
+    } else if (sourceType && sourceId) {
       contextParts.push(`User is asking about ${sourceType} ${sourceId}.`);
     }
 
@@ -118,6 +174,7 @@ Deno.serve(async (req) => {
       const system = [
         "You are Heevy Field Guide, a maintenance assistant for mining and industrial field teams.",
         "Answer using only the user's own records provided in context when relevant.",
+        "When describing PM or work order defects, use the human-readable checklist task names from context (e.g. \"check the valves of the ball mill\"). Never quote internal field ids like pm_task_1_2.",
         "For safety-critical work (isolation, hot work, confined space), remind users to follow site procedures.",
         "Be concise and practical.",
         contextParts.join("\n"),

@@ -30,31 +30,38 @@ class CaptureService {
     List<CapturePhoto> photos = const [],
     String? mineSiteId,
     bool createWorkOrder = false,
+    Map<String, dynamic>? offlinePayload,
   }) async {
-    final photoPayloads = [
-      for (final p in photos)
-        {
-          'mime': p.mime,
-          'ext': p.ext,
-          'data_base64': base64Encode(p.bytes),
-        },
-    ];
+    final Map<String, dynamic> body;
+    if (offlinePayload != null) {
+      body = Map<String, dynamic>.from(offlinePayload);
+    } else {
+      final photoPayloads = [
+        for (final p in photos)
+          {
+            'mime': p.mime,
+            'ext': p.ext,
+            'data_base64': base64Encode(p.bytes),
+          },
+      ];
+      body = {
+        'plant_area': plantArea,
+        if (assetId != null) 'asset_id': assetId,
+        if (assetTag != null) 'asset_tag': assetTag,
+        'severity': severity,
+        'notes': notes,
+        if (voiceTranscript != null) 'voice_transcript': voiceTranscript,
+        if (photoPayloads.isNotEmpty) 'photo_payloads': photoPayloads,
+        if (mineSiteId != null) 'mine_site_id': mineSiteId,
+        if (createWorkOrder) 'create_work_order': true,
+      };
+    }
 
     final FunctionResponse res;
     try {
       res = await _client.functions.invoke(
         'mobile-submit-field-capture',
-        body: {
-          'plant_area': plantArea,
-          if (assetId != null) 'asset_id': assetId,
-          if (assetTag != null) 'asset_tag': assetTag,
-          'severity': severity,
-          'notes': notes,
-          if (voiceTranscript != null) 'voice_transcript': voiceTranscript,
-          if (photoPayloads.isNotEmpty) 'photo_payloads': photoPayloads,
-          if (mineSiteId != null) 'mine_site_id': mineSiteId,
-          if (createWorkOrder) 'create_work_order': true,
-        },
+        body: body,
       );
     } catch (e) {
       throw Exception(_formatInvokeError(e));
@@ -71,45 +78,35 @@ class CaptureService {
     return Map<String, dynamic>.from(data);
   }
 
-  Future<List<Map<String, dynamic>>> listMyCaptures() async {
-    final uid = _client.auth.currentUser?.id;
-    if (uid == null) return [];
-    final rows = await _client
-        .from('field_captures')
-        .select(
-          'id, created_at, plant_area, severity, notes, photo_urls, status, work_request_id, voice_transcript',
-        )
-        .eq('created_by', uid)
-        .order('created_at', ascending: false)
-        .limit(100);
-
-    final captures = List<Map<String, dynamic>>.from(rows);
-    final wrIds = captures
-        .map((c) => c['work_request_id']?.toString())
-        .where((id) => id != null && id.isNotEmpty)
-        .toSet()
-        .toList();
-
-    if (wrIds.isEmpty) return captures;
-
-    final wrRows = await _client
-        .from('work_requests')
-        .select('id, wr_number')
-        .inFilter('id', wrIds);
-    final wrMap = {
-      for (final w in wrRows)
-        w['id']?.toString(): w['wr_number']?.toString(),
-    };
-
-    return [
-      for (final c in captures)
-        {
-          ...c,
-          if (c['work_request_id'] != null)
-            'wr_number': wrMap[c['work_request_id']?.toString()],
-        },
-    ];
+  Future<List<Map<String, dynamic>>> listCaptures({
+    String scope = 'mine',
+  }) async {
+    final res = await _client.functions.invoke(
+      'mobile-list-field-captures',
+      body: {'scope': scope},
+    );
+    if (res.status >= 400) throw Exception(_error(res));
+    final data = res.data;
+    if (data is Map && data['items'] is List) {
+      return List<Map<String, dynamic>>.from(data['items'] as List);
+    }
+    return [];
   }
+
+  Future<Map<String, dynamic>> listCapturesMeta({String scope = 'mine'}) async {
+    final res = await _client.functions.invoke(
+      'mobile-list-field-captures',
+      body: {'scope': scope},
+    );
+    if (res.status >= 400) throw Exception(_error(res));
+    final data = res.data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return {'items': <Map<String, dynamic>>[]};
+  }
+
+  /// Legacy alias — personal captures only.
+  Future<List<Map<String, dynamic>>> listMyCaptures() =>
+      listCaptures(scope: 'mine');
 
   String _formatInvokeError(Object e) {
     final raw = e.toString().replaceFirst('Exception: ', '');
@@ -128,5 +125,11 @@ class CaptureService {
       }
     }
     return 'Submit failed (${res.status})';
+  }
+
+  String _error(FunctionResponse res) {
+    final data = res.data;
+    if (data is Map && data['error'] != null) return data['error'].toString();
+    return 'Request failed (${res.status})';
   }
 }

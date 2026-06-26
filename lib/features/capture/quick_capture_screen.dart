@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../analytics/inspect_analytics.dart';
 import '../../config/heevy_brand.dart';
 import '../../features/assets/asset_picker_sheet.dart';
+import '../../sync/offline_queue.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/heevy_ui.dart';
 import 'capture_service.dart';
@@ -130,6 +133,48 @@ class _QuickCaptureScreenState extends State<QuickCaptureScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      if (isLikelyOfflineError(e)) {
+        try {
+          final photoPayloads = [
+            for (final p in _photos)
+              {
+                'mime': p.mime,
+                'ext': p.ext,
+                'data_base64': base64Encode(p.bytes),
+              },
+          ];
+          await OfflineQueue().enqueue(
+            OfflineQueueItem(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              type: OfflineQueueItemType.fieldCapture,
+              createdAt: DateTime.now(),
+              label: _area.text.trim().isEmpty ? 'Field capture' : _area.text.trim(),
+              payload: {
+                'plant_area': _area.text.trim(),
+                if (_assetId != null) 'asset_id': _assetId,
+                if (_assetTag != null) 'asset_tag': _assetTag,
+                'severity': _severity,
+                'notes': _notes.text.trim(),
+                if (photoPayloads.isNotEmpty) 'photo_payloads': photoPayloads,
+                'create_work_order': _createWorkOrder,
+              },
+            ),
+          );
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Saved offline — will sync when you are back online.',
+                style: TextStyle(color: AppColors.text(context)),
+              ),
+              backgroundColor: AppColors.surface(context),
+            ),
+          );
+          Navigator.of(context).pop(true);
+          return;
+        } catch (_) {
+          // Fall through to error display.
+        }
+      }
       final message = e.toString().replaceFirst('Exception: ', '');
       setState(() => _error = message);
       messenger.showSnackBar(

@@ -24,6 +24,7 @@ export type WorkspaceContext = {
   organizationId: string | null;
   mineSiteId: string | null;
   fullName: string | null;
+  isOrgManager: boolean;
 };
 
 export async function verifyJwt(req: Request): Promise<
@@ -63,7 +64,7 @@ export async function resolveWorkspace(
 ): Promise<WorkspaceContext> {
   const { data: profile } = await admin
     .from("profiles")
-    .select("organization_id, full_name, email")
+    .select("organization_id, full_name, email, is_org_manager")
     .eq("id", userId)
     .maybeSingle();
 
@@ -88,6 +89,7 @@ export async function resolveWorkspace(
     organizationId,
     mineSiteId,
     fullName: profile?.full_name ?? null,
+    isOrgManager: profile?.is_org_manager === true,
   };
 }
 
