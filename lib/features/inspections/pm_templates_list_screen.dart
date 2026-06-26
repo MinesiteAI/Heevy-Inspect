@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../billing/entitlement_service.dart';
 import '../../data/pm/pm_schedule_templates_api.dart';
 import '../../data/workspace_context.dart';
 import '../../theme/app_colors.dart';
@@ -8,7 +9,9 @@ import '../../widgets/heevy_ui.dart';
 import 'schedule_pm_form_screen.dart';
 
 class PmTemplatesListScreen extends StatefulWidget {
-  const PmTemplatesListScreen({super.key});
+  const PmTemplatesListScreen({super.key, this.entitlement});
+
+  final EntitlementResult? entitlement;
 
   @override
   State<PmTemplatesListScreen> createState() => _PmTemplatesListScreenState();
@@ -50,11 +53,13 @@ class _PmTemplatesListScreenState extends State<PmTemplatesListScreen> {
           final siteLabel = workspace.siteDisplayName;
 
           if (items.isEmpty) {
-            return const HeevyEmptyState(
+            final limit = widget.entitlement?.pmTemplateLimitPerDiscipline;
+            return HeevyEmptyState(
               icon: Icons.fact_check_outlined,
               title: 'No PM templates yet',
-              subtitle:
-                  'Templates appear here once your company site is provisioned on the web.',
+              subtitle: limit != null
+                  ? 'Create your first template (up to $limit per discipline) or wait for site provisioning on the web.'
+                  : 'Templates appear here once your company site is provisioned on the web.',
             );
           }
           return ListView.separated(

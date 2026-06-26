@@ -82,7 +82,33 @@ class CaptureService {
         .eq('created_by', uid)
         .order('created_at', ascending: false)
         .limit(100);
-    return List<Map<String, dynamic>>.from(rows);
+
+    final captures = List<Map<String, dynamic>>.from(rows);
+    final wrIds = captures
+        .map((c) => c['work_request_id']?.toString())
+        .where((id) => id != null && id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (wrIds.isEmpty) return captures;
+
+    final wrRows = await _client
+        .from('work_requests')
+        .select('id, wr_number')
+        .inFilter('id', wrIds);
+    final wrMap = {
+      for (final w in wrRows)
+        w['id']?.toString(): w['wr_number']?.toString(),
+    };
+
+    return [
+      for (final c in captures)
+        {
+          ...c,
+          if (c['work_request_id'] != null)
+            'wr_number': wrMap[c['work_request_id']?.toString()],
+        },
+    ];
   }
 
   String _formatInvokeError(Object e) {

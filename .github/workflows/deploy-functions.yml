@@ -45,6 +45,9 @@ jobs:
             mobile-create-work-order
             mobile-list-work-orders
             mobile-get-work-order
+            mobile-list-work-requests
+            mobile-get-work-request
+            mobile-create-pm-template
             mobile-field-chat
             mobile-sign-storage-urls
           )

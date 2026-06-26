@@ -86,6 +86,7 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
                 final area = row['plant_area']?.toString() ?? '—';
                 final sev = row['severity']?.toString() ?? '';
                 final notes = row['notes']?.toString() ?? '';
+                final wrNum = row['wr_number']?.toString() ?? '';
                 final created = row['created_at']?.toString() ?? '';
                 return Material(
                   color: AppColors.surface(context),
@@ -137,6 +138,17 @@ class _CaptureHistoryScreenState extends State<CaptureHistoryScreen> {
                                   style: TextStyle(
                                     color: AppColors.textMuted(context),
                                     fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                              if (wrNum.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  wrNum,
+                                  style: TextStyle(
+                                    color: AppColors.textFaint(context),
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),

@@ -6,14 +6,15 @@ import '../../billing/entitlement_service.dart';
 import '../../config/heevy_brand.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_mode.dart';
+import '../../widgets/field_guide_fab.dart';
 import '../../widgets/heevy_brand_title.dart';
 import '../../widgets/heevy_ui.dart';
 import '../capture/capture_history_screen.dart';
 import '../capture/quick_capture_screen.dart';
-import '../chat/field_guide_screen.dart';
 import '../inspections/inspections_home_screen.dart';
 import '../upgrade/upgrade_screen.dart';
 import '../work_orders/work_orders_list_screen.dart';
+import '../work_requests/work_requests_list_screen.dart';
 
 class InspectHomeScreen extends StatelessWidget {
   const InspectHomeScreen({super.key, required this.entitlement});
@@ -29,6 +30,7 @@ class InspectHomeScreen extends StatelessWidget {
       builder: (context, themeMode, _) {
         return Scaffold(
           backgroundColor: AppColors.bg(context),
+          floatingActionButton: const FieldGuideFab(),
           appBar: HeevyBrandedAppBar(
             actions: [
               IconButton(
@@ -130,15 +132,30 @@ class InspectHomeScreen extends StatelessWidget {
                   subtitle: 'Not enabled for your organization',
                 ),
               const SizedBox(height: 10),
+              if (entitlement.allowsFieldCapture)
+                HeevyListTile(
+                  icon: Icons.assignment_outlined,
+                  title: 'Work requests',
+                  subtitle: 'Draft and open requests from your captures',
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const WorkRequestsListScreen(),
+                      ),
+                    );
+                    await InspectAnalytics.track('wr_list_view');
+                  },
+                ),
+              const SizedBox(height: 10),
               if (entitlement.showPmTemplates)
                 HeevyListTile(
                   icon: Icons.fact_check_outlined,
                   title: 'Inspections',
-                  subtitle: 'PM templates and your submitted results',
+                  subtitle: 'Templates, results, and create new checklists',
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const InspectionsHomeScreen(),
+                        builder: (_) => InspectionsHomeScreen(entitlement: entitlement),
                       ),
                     );
                   },
@@ -153,20 +170,6 @@ class InspectHomeScreen extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const WorkOrdersListScreen(),
-                      ),
-                    );
-                  },
-                ),
-              const SizedBox(height: 10),
-              if (entitlement.showFieldGuide)
-                HeevyListTile(
-                  icon: Icons.chat_bubble_outline,
-                  title: 'Field guide',
-                  subtitle: 'AI assistant for your field data',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const FieldGuideScreen(),
                       ),
                     );
                   },

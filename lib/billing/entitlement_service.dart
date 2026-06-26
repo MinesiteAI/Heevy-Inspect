@@ -48,6 +48,9 @@ class EntitlementResult {
     this.allowsPlant = false,
     this.allowsPmInspections = false,
     this.allowsBasicWorkOrders = false,
+    this.allowsPmTemplateCreate = false,
+    this.pmTemplateLimitPerDiscipline,
+    this.pmTemplateUsageByDiscipline = const {},
   });
 
   final bool access;
@@ -68,6 +71,9 @@ class EntitlementResult {
   final bool allowsPlant;
   final bool allowsPmInspections;
   final bool allowsBasicWorkOrders;
+  final bool allowsPmTemplateCreate;
+  final int? pmTemplateLimitPerDiscipline;
+  final Map<String, int> pmTemplateUsageByDiscipline;
 
   bool get isOrganizationMember =>
       source == 'organization' || companyManagesBilling;
@@ -77,6 +83,15 @@ class EntitlementResult {
   bool get showWorkOrders => allowsBasicWorkOrders;
 
   bool get showFieldGuide => allowsFieldCapture;
+
+  int templateUsedFor(String discipline) =>
+      pmTemplateUsageByDiscipline[discipline] ?? 0;
+
+  bool isTemplateAtCap(String discipline) {
+    final limit = pmTemplateLimitPerDiscipline;
+    if (limit == null) return false;
+    return templateUsedFor(discipline) >= limit;
+  }
 
   factory EntitlementResult.fromJson(Map<String, dynamic> json) {
     DateTime? trial;
@@ -93,6 +108,13 @@ class EntitlementResult {
     final rawPack = json['org_pack'];
     if (rawPack is List) {
       pack = rawPack.map((e) => e.toString()).toList();
+    }
+    Map<String, int> templateUsage = {};
+    final rawUsage = json['pm_template_usage_by_discipline'];
+    if (rawUsage is Map) {
+      templateUsage = rawUsage.map(
+        (k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0),
+      );
     }
     return EntitlementResult(
       access: json['access'] == true,
@@ -113,6 +135,9 @@ class EntitlementResult {
       allowsPlant: json['allows_plant'] == true,
       allowsPmInspections: json['allows_pm_inspections'] == true,
       allowsBasicWorkOrders: json['allows_basic_work_orders'] == true,
+      allowsPmTemplateCreate: json['allows_pm_template_create'] == true,
+      pmTemplateLimitPerDiscipline: (json['pm_template_limit_per_discipline'] as num?)?.toInt(),
+      pmTemplateUsageByDiscipline: templateUsage,
     );
   }
 
